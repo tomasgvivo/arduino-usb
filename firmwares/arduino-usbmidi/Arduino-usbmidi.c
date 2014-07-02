@@ -249,12 +249,7 @@ void EVENT_USB_Device_UnhandledControlRequest(void)
 ISR(USART1_RX_vect, ISR_BLOCK)
 {
     uint8_t ReceivedByte = UDR1;
-
-<<<<<<< HEAD
     if ((true) &&
-=======
-    if ((USB_DeviceState == DEVICE_STATE_Configured) &&
->>>>>>> 0a0cfc772741a97581040fea32d0553febb6f284
 	    !RingBuffer_IsFull(&USARTtoUSB_Buffer)) {
 	RingBuffer_Insert(&USARTtoUSB_Buffer, ReceivedByte);
     }
