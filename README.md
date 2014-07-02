@@ -1,4 +1,4 @@
-This fork contains a modificated Make files and Sources of the main copy of <a href="https://github.com/harlequin-tech/arduino-usb">harlequin-tech/arduino-usb</a> so it's ready to go for the Arduino UNO Rev3.
+This fork contains modified MakeFiles and Sources of the main copy of <a href="https://github.com/harlequin-tech/arduino-usb">harlequin-tech/arduino-usb</a> so it's ready to go for the Arduino UNO Rev3.
 
 Arduino UNO Rev3 USB drivers
 
