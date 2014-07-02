@@ -1,9 +1,11 @@
-Arduino UNO and MEGA2560 USB drivers
+This fork contains a modificated Make files and Sources of the main copy of <a href="https://github.com/harlequin-tech/arduino-usb">harlequin-tech/arduino-usb</a> so it's ready to go for the Arduino UNO Rev3.
 
-This is a collection of USB firmware for the Atmega8U2 and Atmega16U2 processors
-on the UNO and MEGA2560 boards.
+Arduino UNO Rev3 USB drivers
 
-By loading the appropriate firmware onto the 8U2 or 16U2 the Arduino can be turned
+This is a collection of USB firmware for the Atmega16u2 processor
+on the UNO Rev3.
+
+By loading the appropriate firmware onto the 16u2 the Arduino can be turned
 into a native USB device.
 
 The following drivers are currently available here.
@@ -17,7 +19,7 @@ All drivers are based on examples from Dean Camera's <a href="http://www.fourwal
 LUFA version 100807 is used to build the drivers.
 
 Example Arduino sketches are provided in the example directory.  The sketches send and receive simplified binary
-USB reports using the hardware serial interface, which are in turn converted into real USB reports by the 8U2/16U2.
+USB reports using the hardware serial interface, which are in turn converted into real USB reports by the 16u2.
 
 See <a href="http://hunt.net.nz/users/darran">Arduino Hacking</a> for details.
 
@@ -101,42 +103,16 @@ You can also flash it to the UNO's 8U2 using the makefile after putting the UNO 
 
     make dfu  
 
-
-If you have a revision 3 UNO (or MEGA2560), edit the makefile and set the following variables before building the firmware and flashing it:
-
-    MCU = atmega16u2  
-    MCU_AVRDUDE = atmega16u2  
-    MCU_DFU = atmega16u2  
-
-
 Loading the firmware
 --------------------
 
 For the Atmega8u2 (UNO R1, R2, MEGA2560 R1, R2):
 Put the UNO into DFU mode.
 
-    dfu-programmer at90usb82 erase  
-    dfu-programmer at90usb82 flash --debug 1 Arduino-big-joystick.hex  
-    dfu-programmer at90usb82 reset  
-
-Unplug the UNO's USB cable for a few seconds and plug it back in.  
-
-For the ATMEGA16U2 (UNO R3, MEGA2560 R3):
-Put the UNO into DFU mode.
-
     dfu-programmer atmega16u2 erase  
     dfu-programmer atmega16u2 flash --debug 1 Arduino-big-joystick.hex  
     dfu-programmer atmega16u2 reset  
 
-Unplug the UNO's USB cable for a few seconds and plug it back in
+Unplug the UNO's USB cable for a few seconds and plug it back in.
 
 Note you will need dfu-programmer version 0.5.5 to flash the atmega16u2.
-
-FAQ
----
-
-1. New USB drivers are loaded to the Arduino using DFU mode and a loading progam
-   like dfu-progammer (Linux, OSX) or flip (Windows).
-2. Sketches can only be loaded to the Arduino when the 8U2/16U2 is running the
-   arduino-usbserial.hex driver. You must flash this firmware back to the Arduino 
-   using DFU mode before you can load a new sketch.
