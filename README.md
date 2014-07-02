@@ -23,6 +23,8 @@ USB reports using the hardware serial interface, which are in turn converted int
 
 See <a href="http://hunt.net.nz/users/darran">Arduino Hacking</a> for details.
 
+Compiled Hex Files (for atmega16u2) can be found under the 'frimwares' directory.
+
 Sketch report formats
 ---------------------
 
