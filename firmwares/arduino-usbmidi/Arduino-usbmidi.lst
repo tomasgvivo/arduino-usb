@@ -1,0 +1,1813 @@
+   1               		.file	"Arduino-usbmidi.c"
+   2               	__SP_H__ = 0x3e
+   3               	__SP_L__ = 0x3d
+   4               	__SREG__ = 0x3f
+   5               	__tmp_reg__ = 0
+   6               	__zero_reg__ = 1
+   7               		.text
+   8               	.Ltext0:
+   9               		.cfi_sections	.debug_frame
+  10               		.section	.text.RingBuffer_Insert,"ax",@progbits
+  12               	RingBuffer_Insert:
+  13               	.LFB72:
+  14               		.file 1 "Lib/LightweightRingBuff.h"
+   1:Lib/LightweightRingBuff.h **** /*
+   2:Lib/LightweightRingBuff.h ****              LUFA Library
+   3:Lib/LightweightRingBuff.h ****      Copyright (C) Dean Camera, 2010.
+   4:Lib/LightweightRingBuff.h ****               
+   5:Lib/LightweightRingBuff.h ****   dean [at] fourwalledcubicle [dot] com
+   6:Lib/LightweightRingBuff.h ****       www.fourwalledcubicle.com
+   7:Lib/LightweightRingBuff.h **** */
+   8:Lib/LightweightRingBuff.h **** 
+   9:Lib/LightweightRingBuff.h **** /*
+  10:Lib/LightweightRingBuff.h ****   Copyright 2010  Dean Camera (dean [at] fourwalledcubicle [dot] com)
+  11:Lib/LightweightRingBuff.h **** 
+  12:Lib/LightweightRingBuff.h ****   Permission to use, copy, modify, distribute, and sell this 
+  13:Lib/LightweightRingBuff.h ****   software and its documentation for any purpose is hereby granted
+  14:Lib/LightweightRingBuff.h ****   without fee, provided that the above copyright notice appear in 
+  15:Lib/LightweightRingBuff.h ****   all copies and that both that the copyright notice and this
+  16:Lib/LightweightRingBuff.h ****   permission notice and warranty disclaimer appear in supporting 
+  17:Lib/LightweightRingBuff.h ****   documentation, and that the name of the author not be used in 
+  18:Lib/LightweightRingBuff.h ****   advertising or publicity pertaining to distribution of the 
+  19:Lib/LightweightRingBuff.h ****   software without specific, written prior permission.
+  20:Lib/LightweightRingBuff.h **** 
+  21:Lib/LightweightRingBuff.h ****   The author disclaim all warranties with regard to this
+  22:Lib/LightweightRingBuff.h ****   software, including all implied warranties of merchantability
+  23:Lib/LightweightRingBuff.h ****   and fitness.  In no event shall the author be liable for any
+  24:Lib/LightweightRingBuff.h ****   special, indirect or consequential damages or any damages
+  25:Lib/LightweightRingBuff.h ****   whatsoever resulting from loss of use, data or profits, whether
+  26:Lib/LightweightRingBuff.h ****   in an action of contract, negligence or other tortious action,
+  27:Lib/LightweightRingBuff.h ****   arising out of or in connection with the use or performance of
+  28:Lib/LightweightRingBuff.h ****   this software.
+  29:Lib/LightweightRingBuff.h **** */
+  30:Lib/LightweightRingBuff.h **** 
+  31:Lib/LightweightRingBuff.h **** /** \file
+  32:Lib/LightweightRingBuff.h ****  *
+  33:Lib/LightweightRingBuff.h ****  *  Ultra lightweight ring buffer, for fast insertion/deletion.
+  34:Lib/LightweightRingBuff.h ****  */
+  35:Lib/LightweightRingBuff.h ****  
+  36:Lib/LightweightRingBuff.h **** #ifndef _ULW_RING_BUFF_H_
+  37:Lib/LightweightRingBuff.h **** #define _ULW_RING_BUFF_H_
+  38:Lib/LightweightRingBuff.h **** 
+  39:Lib/LightweightRingBuff.h **** 	/* Includes: */
+  40:Lib/LightweightRingBuff.h **** 		#include <util/atomic.h>
+  41:Lib/LightweightRingBuff.h **** 	
+  42:Lib/LightweightRingBuff.h **** 		#include <stdint.h>
+  43:Lib/LightweightRingBuff.h **** 		#include <stdbool.h>
+  44:Lib/LightweightRingBuff.h **** 
+  45:Lib/LightweightRingBuff.h **** 	/* Defines: */
+  46:Lib/LightweightRingBuff.h **** 		/** Size of each ring buffer, in data elements - must be between 1 and 255. */
+  47:Lib/LightweightRingBuff.h **** 		#define BUFFER_SIZE         128
+  48:Lib/LightweightRingBuff.h **** 		
+  49:Lib/LightweightRingBuff.h **** 		/** Maximum number of data elements to buffer before forcing a flush. 
+  50:Lib/LightweightRingBuff.h **** 		 *  Must be less than BUFFER_SIZE
+  51:Lib/LightweightRingBuff.h **** 		 */
+  52:Lib/LightweightRingBuff.h **** 		#define BUFFER_NEARLY_FULL	96
+  53:Lib/LightweightRingBuff.h **** 		
+  54:Lib/LightweightRingBuff.h **** 		/** Type of data to store into the buffer. */
+  55:Lib/LightweightRingBuff.h **** 		#define RingBuff_Data_t     uint8_t
+  56:Lib/LightweightRingBuff.h **** 
+  57:Lib/LightweightRingBuff.h **** 		/** Datatype which may be used to store the count of data stored in a buffer, retrieved
+  58:Lib/LightweightRingBuff.h **** 		 *  via a call to \ref RingBuffer_GetCount().
+  59:Lib/LightweightRingBuff.h **** 		 */
+  60:Lib/LightweightRingBuff.h **** 		#if (BUFFER_SIZE <= 0xFF)
+  61:Lib/LightweightRingBuff.h **** 			#define RingBuff_Count_t   uint8_t
+  62:Lib/LightweightRingBuff.h **** 		#else
+  63:Lib/LightweightRingBuff.h **** 			#define RingBuff_Count_t   uint16_t
+  64:Lib/LightweightRingBuff.h **** 		#endif
+  65:Lib/LightweightRingBuff.h **** 
+  66:Lib/LightweightRingBuff.h **** 	/* Type Defines: */
+  67:Lib/LightweightRingBuff.h **** 		/** Type define for a new ring buffer object. Buffers should be initialized via a call to
+  68:Lib/LightweightRingBuff.h **** 		 *  \ref RingBuffer_InitBuffer() before use.
+  69:Lib/LightweightRingBuff.h **** 		 */
+  70:Lib/LightweightRingBuff.h **** 		typedef struct
+  71:Lib/LightweightRingBuff.h **** 		{
+  72:Lib/LightweightRingBuff.h **** 			RingBuff_Data_t  Buffer[BUFFER_SIZE]; /**< Internal ring buffer data, referenced by the buffer p
+  73:Lib/LightweightRingBuff.h **** 			RingBuff_Data_t* In; /**< Current storage location in the circular buffer */
+  74:Lib/LightweightRingBuff.h **** 			RingBuff_Data_t* Out; /**< Current retrieval location in the circular buffer */
+  75:Lib/LightweightRingBuff.h **** 			RingBuff_Count_t Count;
+  76:Lib/LightweightRingBuff.h **** 		} RingBuff_t;
+  77:Lib/LightweightRingBuff.h **** 	
+  78:Lib/LightweightRingBuff.h **** 	/* Inline Functions: */
+  79:Lib/LightweightRingBuff.h **** 		/** Initializes a ring buffer ready for use. Buffers must be initialized via this function
+  80:Lib/LightweightRingBuff.h **** 		 *  before any operations are called upon them. Already initialized buffers may be reset
+  81:Lib/LightweightRingBuff.h **** 		 *  by re-initializing them using this function.
+  82:Lib/LightweightRingBuff.h **** 		 *
+  83:Lib/LightweightRingBuff.h **** 		 *  \param[out] Buffer  Pointer to a ring buffer structure to initialize
+  84:Lib/LightweightRingBuff.h **** 		 */
+  85:Lib/LightweightRingBuff.h **** 		static inline void RingBuffer_InitBuffer(RingBuff_t* const Buffer)
+  86:Lib/LightweightRingBuff.h **** 		{
+  87:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  88:Lib/LightweightRingBuff.h **** 			{
+  89:Lib/LightweightRingBuff.h **** 				Buffer->In  = Buffer->Buffer;
+  90:Lib/LightweightRingBuff.h **** 				Buffer->Out = Buffer->Buffer;
+  91:Lib/LightweightRingBuff.h **** 			}
+  92:Lib/LightweightRingBuff.h **** 		}
+  93:Lib/LightweightRingBuff.h **** 		
+  94:Lib/LightweightRingBuff.h **** 		/** Retrieves the minimum number of bytes stored in a particular buffer. This value is computed
+  95:Lib/LightweightRingBuff.h **** 		 *  by entering an atomic lock on the buffer while the IN and OUT locations are fetched, so that
+  96:Lib/LightweightRingBuff.h **** 		 *  the buffer cannot be modified while the computation takes place. This value should be cached
+  97:Lib/LightweightRingBuff.h **** 		 *  when reading out the contents of the buffer, so that as small a time as possible is spent
+  98:Lib/LightweightRingBuff.h **** 		 *  in an atomic lock.
+  99:Lib/LightweightRingBuff.h **** 		 *
+ 100:Lib/LightweightRingBuff.h **** 		 *  \note The value returned by this function is guaranteed to only be the minimum number of byte
+ 101:Lib/LightweightRingBuff.h **** 		 *        stored in the given buffer; this value may change as other threads write new data and s
+ 102:Lib/LightweightRingBuff.h **** 		 *        the returned number should be used only to determine how many successive reads may safe
+ 103:Lib/LightweightRingBuff.h **** 		 *        be performed on the buffer.
+ 104:Lib/LightweightRingBuff.h **** 		 *
+ 105:Lib/LightweightRingBuff.h **** 		 *  \param[in] Buffer  Pointer to a ring buffer structure whose count is to be computed
+ 106:Lib/LightweightRingBuff.h **** 		 */
+ 107:Lib/LightweightRingBuff.h **** 		static inline RingBuff_Count_t RingBuffer_GetCount(RingBuff_t* const Buffer)
+ 108:Lib/LightweightRingBuff.h **** 		{
+ 109:Lib/LightweightRingBuff.h **** 			RingBuff_Count_t Count;
+ 110:Lib/LightweightRingBuff.h **** 			
+ 111:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+ 112:Lib/LightweightRingBuff.h **** 			{
+ 113:Lib/LightweightRingBuff.h **** 				Count = Buffer->Count;
+ 114:Lib/LightweightRingBuff.h **** 			}
+ 115:Lib/LightweightRingBuff.h **** 			
+ 116:Lib/LightweightRingBuff.h **** 			return Count;
+ 117:Lib/LightweightRingBuff.h **** 		}
+ 118:Lib/LightweightRingBuff.h **** 		
+ 119:Lib/LightweightRingBuff.h **** 		/** Atomically determines if the specified ring buffer contains any free space. This should
+ 120:Lib/LightweightRingBuff.h **** 		 *  be tested before storing data to the buffer, to ensure that no data is lost due to a
+ 121:Lib/LightweightRingBuff.h **** 		 *  buffer overrun.
+ 122:Lib/LightweightRingBuff.h **** 		 *
+ 123:Lib/LightweightRingBuff.h **** 		 *  \param[in,out] Buffer  Pointer to a ring buffer structure to insert into
+ 124:Lib/LightweightRingBuff.h **** 		 *
+ 125:Lib/LightweightRingBuff.h **** 		 *  \return Boolean true if the buffer contains no free space, false otherwise
+ 126:Lib/LightweightRingBuff.h **** 		 */		 
+ 127:Lib/LightweightRingBuff.h **** 		static inline bool RingBuffer_IsFull(RingBuff_t* const Buffer)
+ 128:Lib/LightweightRingBuff.h **** 		{
+ 129:Lib/LightweightRingBuff.h **** 			return (RingBuffer_GetCount(Buffer) == BUFFER_SIZE);
+ 130:Lib/LightweightRingBuff.h **** 		}
+ 131:Lib/LightweightRingBuff.h **** 
+ 132:Lib/LightweightRingBuff.h **** 		/** Atomically determines if the specified ring buffer contains any data. This should
+ 133:Lib/LightweightRingBuff.h **** 		 *  be tested before removing data from the buffer, to ensure that the buffer does not
+ 134:Lib/LightweightRingBuff.h **** 		 *  underflow.
+ 135:Lib/LightweightRingBuff.h **** 		 *
+ 136:Lib/LightweightRingBuff.h **** 		 *  If the data is to be removed in a loop, store the total number of bytes stored in the
+ 137:Lib/LightweightRingBuff.h **** 		 *  buffer (via a call to the \ref RingBuffer_GetCount() function) in a temporary variable
+ 138:Lib/LightweightRingBuff.h **** 		 *  to reduce the time spent in atomicity locks.
+ 139:Lib/LightweightRingBuff.h **** 		 *
+ 140:Lib/LightweightRingBuff.h **** 		 *  \param[in,out] Buffer  Pointer to a ring buffer structure to insert into
+ 141:Lib/LightweightRingBuff.h **** 		 *
+ 142:Lib/LightweightRingBuff.h **** 		 *  \return Boolean true if the buffer contains no free space, false otherwise
+ 143:Lib/LightweightRingBuff.h **** 		 */		 
+ 144:Lib/LightweightRingBuff.h **** 		static inline bool RingBuffer_IsEmpty(RingBuff_t* const Buffer)
+ 145:Lib/LightweightRingBuff.h **** 		{
+ 146:Lib/LightweightRingBuff.h **** 			return (RingBuffer_GetCount(Buffer) == 0);
+ 147:Lib/LightweightRingBuff.h **** 		}
+ 148:Lib/LightweightRingBuff.h **** 
+ 149:Lib/LightweightRingBuff.h **** 		/** Inserts an element into the ring buffer.
+ 150:Lib/LightweightRingBuff.h **** 		 *
+ 151:Lib/LightweightRingBuff.h **** 		 *  \note Only one execution thread (main program thread or an ISR) may insert into a single buff
+ 152:Lib/LightweightRingBuff.h **** 		 *        otherwise data corruption may occur. Insertion and removal may occur from different exe
+ 153:Lib/LightweightRingBuff.h **** 		 *        threads.
+ 154:Lib/LightweightRingBuff.h **** 		 *
+ 155:Lib/LightweightRingBuff.h **** 		 *  \param[in,out] Buffer  Pointer to a ring buffer structure to insert into
+ 156:Lib/LightweightRingBuff.h **** 		 *  \param[in]     Data    Data element to insert into the buffer
+ 157:Lib/LightweightRingBuff.h **** 		 */
+ 158:Lib/LightweightRingBuff.h **** 		static inline void RingBuffer_Insert(RingBuff_t* const Buffer,
+ 159:Lib/LightweightRingBuff.h **** 		                                     const RingBuff_Data_t Data)
+ 160:Lib/LightweightRingBuff.h **** 		{
+  15               		.loc 1 160 0
+  16               		.cfi_startproc
+  17               	.LVL0:
+  18               	/* prologue: function */
+  19               	/* frame size = 0 */
+  20               	/* stack size = 0 */
+  21               	.L__stack_usage = 0
+ 161:Lib/LightweightRingBuff.h **** 			*Buffer->In = Data;
+  22               		.loc 1 161 0
+  23 0000 FC01      		movw r30,r24
+  24 0002 E058      		subi r30,-128
+  25 0004 FF4F      		sbci r31,-1
+  26 0006 A081      		ld r26,Z
+  27 0008 B181      		ldd r27,Z+1
+  28 000a 6C93      		st X,r22
+ 162:Lib/LightweightRingBuff.h **** 			
+ 163:Lib/LightweightRingBuff.h **** 			if (++Buffer->In == &Buffer->Buffer[BUFFER_SIZE])
+  29               		.loc 1 163 0
+  30 000c A081      		ld r26,Z
+  31 000e B181      		ldd r27,Z+1
+  32 0010 9D01      		movw r18,r26
+  33 0012 2F5F      		subi r18,-1
+  34 0014 3F4F      		sbci r19,-1
+  35 0016 3183      		std Z+1,r19
+  36 0018 2083      		st Z,r18
+  37 001a 2E17      		cp r18,r30
+  38 001c 3F07      		cpc r19,r31
+  39 001e 01F4      		brne .L2
+ 164:Lib/LightweightRingBuff.h **** 			  Buffer->In = Buffer->Buffer;
+  40               		.loc 1 164 0
+  41 0020 1296      		adiw r26,1+1
+  42 0022 9C93      		st X,r25
+  43 0024 8E93      		st -X,r24
+  44 0026 1197      		sbiw r26,1
+  45               	.L2:
+  46               	.LBB35:
+ 165:Lib/LightweightRingBuff.h **** 
+ 166:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+  47               		.loc 1 166 0
+  48 0028 2FB7      		in r18,__SREG__
+  49               	.LVL1:
+  50               	.LBB36:
+  51               	.LBB37:
+  52               		.file 2 "/usr/lib/avr/include/util/atomic.h"
+   1:/usr/lib/avr/include/util/atomic.h **** /* Copyright (c) 2007 Dean Camera
+   2:/usr/lib/avr/include/util/atomic.h ****    All rights reserved.
+   3:/usr/lib/avr/include/util/atomic.h **** 
+   4:/usr/lib/avr/include/util/atomic.h ****    Redistribution and use in source and binary forms, with or without
+   5:/usr/lib/avr/include/util/atomic.h ****    modification, are permitted provided that the following conditions are met:
+   6:/usr/lib/avr/include/util/atomic.h **** 
+   7:/usr/lib/avr/include/util/atomic.h ****    * Redistributions of source code must retain the above copyright
+   8:/usr/lib/avr/include/util/atomic.h ****      notice, this list of conditions and the following disclaimer.
+   9:/usr/lib/avr/include/util/atomic.h **** 
+  10:/usr/lib/avr/include/util/atomic.h ****    * Redistributions in binary form must reproduce the above copyright
+  11:/usr/lib/avr/include/util/atomic.h ****      notice, this list of conditions and the following disclaimer in
+  12:/usr/lib/avr/include/util/atomic.h ****      the documentation and/or other materials provided with the
+  13:/usr/lib/avr/include/util/atomic.h ****      distribution.
+  14:/usr/lib/avr/include/util/atomic.h **** 
+  15:/usr/lib/avr/include/util/atomic.h ****    * Neither the name of the copyright holders nor the names of
+  16:/usr/lib/avr/include/util/atomic.h ****      contributors may be used to endorse or promote products derived
+  17:/usr/lib/avr/include/util/atomic.h ****      from this software without specific prior written permission.
+  18:/usr/lib/avr/include/util/atomic.h **** 
+  19:/usr/lib/avr/include/util/atomic.h ****   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  20:/usr/lib/avr/include/util/atomic.h ****   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  21:/usr/lib/avr/include/util/atomic.h ****   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  22:/usr/lib/avr/include/util/atomic.h ****   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  23:/usr/lib/avr/include/util/atomic.h ****   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  24:/usr/lib/avr/include/util/atomic.h ****   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  25:/usr/lib/avr/include/util/atomic.h ****   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  26:/usr/lib/avr/include/util/atomic.h ****   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  27:/usr/lib/avr/include/util/atomic.h ****   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  28:/usr/lib/avr/include/util/atomic.h ****   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  29:/usr/lib/avr/include/util/atomic.h ****   POSSIBILITY OF SUCH DAMAGE.
+  30:/usr/lib/avr/include/util/atomic.h **** */
+  31:/usr/lib/avr/include/util/atomic.h **** 
+  32:/usr/lib/avr/include/util/atomic.h **** /* $Id: atomic.h 2158 2010-06-10 15:48:28Z joerg_wunsch $ */
+  33:/usr/lib/avr/include/util/atomic.h **** 
+  34:/usr/lib/avr/include/util/atomic.h **** #ifndef _UTIL_ATOMIC_H_
+  35:/usr/lib/avr/include/util/atomic.h **** #define _UTIL_ATOMIC_H_ 1
+  36:/usr/lib/avr/include/util/atomic.h **** 
+  37:/usr/lib/avr/include/util/atomic.h **** #include <avr/io.h>
+  38:/usr/lib/avr/include/util/atomic.h **** #include <avr/interrupt.h>
+  39:/usr/lib/avr/include/util/atomic.h **** 
+  40:/usr/lib/avr/include/util/atomic.h **** #if !defined(__DOXYGEN__)
+  41:/usr/lib/avr/include/util/atomic.h **** /* Internal helper functions. */
+  42:/usr/lib/avr/include/util/atomic.h **** static __inline__ uint8_t __iSeiRetVal(void)
+  43:/usr/lib/avr/include/util/atomic.h **** {
+  44:/usr/lib/avr/include/util/atomic.h ****     sei();
+  45:/usr/lib/avr/include/util/atomic.h ****     return 1;
+  46:/usr/lib/avr/include/util/atomic.h **** }
+  47:/usr/lib/avr/include/util/atomic.h **** 
+  48:/usr/lib/avr/include/util/atomic.h **** static __inline__ uint8_t __iCliRetVal(void)
+  49:/usr/lib/avr/include/util/atomic.h **** {
+  50:/usr/lib/avr/include/util/atomic.h ****     cli();
+  53               		.loc 2 50 0
+  54               	/* #APP */
+  55               	 ;  50 "/usr/lib/avr/include/util/atomic.h" 1
+  56 002a F894      		cli
+  57               	 ;  0 "" 2
+  58               	.LVL2:
+  59               	/* #NOAPP */
+  60               	.LBE37:
+  61               	.LBE36:
+ 167:Lib/LightweightRingBuff.h **** 			{
+ 168:Lib/LightweightRingBuff.h **** 				Buffer->Count++;
+  62               		.loc 1 168 0
+  63 002c FC01      		movw r30,r24
+  64 002e EC57      		subi r30,124
+  65 0030 FF4F      		sbci r31,-1
+  66 0032 8081      		ld r24,Z
+  67               	.LVL3:
+  68 0034 8F5F      		subi r24,lo8(-(1))
+  69 0036 8083      		st Z,r24
+  70               	.LVL4:
+  71               	.LBB38:
+  72               	.LBB39:
+  51:/usr/lib/avr/include/util/atomic.h ****     return 1;
+  52:/usr/lib/avr/include/util/atomic.h **** }
+  53:/usr/lib/avr/include/util/atomic.h **** 
+  54:/usr/lib/avr/include/util/atomic.h **** static __inline__ void __iSeiParam(const uint8_t *__s)
+  55:/usr/lib/avr/include/util/atomic.h **** {
+  56:/usr/lib/avr/include/util/atomic.h ****     sei();
+  57:/usr/lib/avr/include/util/atomic.h ****     __asm__ volatile ("" ::: "memory");
+  58:/usr/lib/avr/include/util/atomic.h ****     (void)__s;
+  59:/usr/lib/avr/include/util/atomic.h **** }
+  60:/usr/lib/avr/include/util/atomic.h **** 
+  61:/usr/lib/avr/include/util/atomic.h **** static __inline__ void __iCliParam(const uint8_t *__s)
+  62:/usr/lib/avr/include/util/atomic.h **** {
+  63:/usr/lib/avr/include/util/atomic.h ****     cli();
+  64:/usr/lib/avr/include/util/atomic.h ****     __asm__ volatile ("" ::: "memory");
+  65:/usr/lib/avr/include/util/atomic.h ****     (void)__s;
+  66:/usr/lib/avr/include/util/atomic.h **** }
+  67:/usr/lib/avr/include/util/atomic.h **** 
+  68:/usr/lib/avr/include/util/atomic.h **** static __inline__ void __iRestore(const  uint8_t *__s)
+  69:/usr/lib/avr/include/util/atomic.h **** {
+  70:/usr/lib/avr/include/util/atomic.h ****     SREG = *__s;
+  73               		.loc 2 70 0
+  74 0038 2FBF      		out __SREG__,r18
+  71:/usr/lib/avr/include/util/atomic.h ****     __asm__ volatile ("" ::: "memory");
+  75               		.loc 2 71 0
+  76 003a 0895      		ret
+  77               	.LBE39:
+  78               	.LBE38:
+  79               	.LBE35:
+  80               		.cfi_endproc
+  81               	.LFE72:
+  83               		.section	.text.RingBuffer_Remove,"ax",@progbits
+  85               	RingBuffer_Remove:
+  86               	.LFB73:
+ 169:Lib/LightweightRingBuff.h **** 			}
+ 170:Lib/LightweightRingBuff.h **** 		}
+ 171:Lib/LightweightRingBuff.h **** 
+ 172:Lib/LightweightRingBuff.h **** 		/** Removes an element from the ring buffer.
+ 173:Lib/LightweightRingBuff.h **** 		 *
+ 174:Lib/LightweightRingBuff.h **** 		 *  \note Only one execution thread (main program thread or an ISR) may remove from a single buff
+ 175:Lib/LightweightRingBuff.h **** 		 *        otherwise data corruption may occur. Insertion and removal may occur from different exe
+ 176:Lib/LightweightRingBuff.h **** 		 *        threads.
+ 177:Lib/LightweightRingBuff.h **** 		 *
+ 178:Lib/LightweightRingBuff.h **** 		 *  \param[in,out] Buffer  Pointer to a ring buffer structure to retrieve from
+ 179:Lib/LightweightRingBuff.h **** 		 *
+ 180:Lib/LightweightRingBuff.h **** 		 *  \return Next data element stored in the buffer
+ 181:Lib/LightweightRingBuff.h **** 		 */
+ 182:Lib/LightweightRingBuff.h **** 		static inline RingBuff_Data_t RingBuffer_Remove(RingBuff_t* const Buffer)
+ 183:Lib/LightweightRingBuff.h **** 		{
+  87               		.loc 1 183 0
+  88               		.cfi_startproc
+  89               	.LVL5:
+  90               	/* prologue: function */
+  91               	/* frame size = 0 */
+  92               	/* stack size = 0 */
+  93               	.L__stack_usage = 0
+ 184:Lib/LightweightRingBuff.h **** 			RingBuff_Data_t Data = *Buffer->Out;
+  94               		.loc 1 184 0
+  95 0000 DC01      		movw r26,r24
+  96 0002 AE57      		subi r26,126
+  97 0004 BF4F      		sbci r27,-1
+  98 0006 ED91      		ld r30,X+
+  99 0008 FC91      		ld r31,X
+ 100 000a 1197      		sbiw r26,1
+ 101 000c 4191      		ld r20,Z+
+ 102               	.LVL6:
+ 185:Lib/LightweightRingBuff.h **** 			
+ 186:Lib/LightweightRingBuff.h **** 			if (++Buffer->Out == &Buffer->Buffer[BUFFER_SIZE])
+ 103               		.loc 1 186 0
+ 104 000e 1196      		adiw r26,1
+ 105 0010 FC93      		st X,r31
+ 106 0012 EE93      		st -X,r30
+ 107 0014 9C01      		movw r18,r24
+ 108 0016 2058      		subi r18,-128
+ 109 0018 3F4F      		sbci r19,-1
+ 110 001a E217      		cp r30,r18
+ 111 001c F307      		cpc r31,r19
+ 112 001e 01F4      		brne .L5
+ 187:Lib/LightweightRingBuff.h **** 			  Buffer->Out = Buffer->Buffer;
+ 113               		.loc 1 187 0
+ 114 0020 8D93      		st X+,r24
+ 115 0022 9C93      		st X,r25
+ 116               	.L5:
+ 117               	.LBB40:
+ 188:Lib/LightweightRingBuff.h **** 
+ 189:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+ 118               		.loc 1 189 0
+ 119 0024 2FB7      		in r18,__SREG__
+ 120               	.LVL7:
+ 121               	.LBB41:
+ 122               	.LBB42:
+  50:/usr/lib/avr/include/util/atomic.h ****     cli();
+ 123               		.loc 2 50 0
+ 124               	/* #APP */
+ 125               	 ;  50 "/usr/lib/avr/include/util/atomic.h" 1
+ 126 0026 F894      		cli
+ 127               	 ;  0 "" 2
+ 128               	.LVL8:
+ 129               	/* #NOAPP */
+ 130               	.LBE42:
+ 131               	.LBE41:
+ 190:Lib/LightweightRingBuff.h **** 			{
+ 191:Lib/LightweightRingBuff.h **** 				Buffer->Count--;
+ 132               		.loc 1 191 0
+ 133 0028 FC01      		movw r30,r24
+ 134 002a EC57      		subi r30,124
+ 135 002c FF4F      		sbci r31,-1
+ 136 002e 9081      		ld r25,Z
+ 137 0030 9150      		subi r25,lo8(-(-1))
+ 138 0032 9083      		st Z,r25
+ 139               	.LVL9:
+ 140               	.LBB43:
+ 141               	.LBB44:
+  70:/usr/lib/avr/include/util/atomic.h ****     SREG = *__s;
+ 142               		.loc 2 70 0
+ 143 0034 2FBF      		out __SREG__,r18
+ 144               		.loc 2 71 0
+ 145               	.LBE44:
+ 146               	.LBE43:
+ 147               	.LBE40:
+ 192:Lib/LightweightRingBuff.h **** 			}
+ 193:Lib/LightweightRingBuff.h **** 			
+ 194:Lib/LightweightRingBuff.h **** 			return Data;
+ 195:Lib/LightweightRingBuff.h **** 		}
+ 148               		.loc 1 195 0
+ 149 0036 842F      		mov r24,r20
+ 150               	.LVL10:
+ 151 0038 0895      		ret
+ 152               		.cfi_endproc
+ 153               	.LFE73:
+ 155               		.section	.text.LEDs_SetAllLEDs,"ax",@progbits
+ 157               	LEDs_SetAllLEDs:
+ 158               	.LFB77:
+ 159               		.file 3 "./Board/LEDs.h"
+   1:./Board/LEDs.h **** /*
+   2:./Board/LEDs.h ****              LUFA Library
+   3:./Board/LEDs.h ****      Copyright (C) Dean Camera, 2010.
+   4:./Board/LEDs.h ****               
+   5:./Board/LEDs.h ****   dean [at] fourwalledcubicle [dot] com
+   6:./Board/LEDs.h ****       www.fourwalledcubicle.com
+   7:./Board/LEDs.h **** */
+   8:./Board/LEDs.h **** 
+   9:./Board/LEDs.h **** /*
+  10:./Board/LEDs.h ****   Copyright 2010  Dean Camera (dean [at] fourwalledcubicle [dot] com)
+  11:./Board/LEDs.h **** 
+  12:./Board/LEDs.h ****   Permission to use, copy, modify, distribute, and sell this 
+  13:./Board/LEDs.h ****   software and its documentation for any purpose is hereby granted
+  14:./Board/LEDs.h ****   without fee, provided that the above copyright notice appear in 
+  15:./Board/LEDs.h ****   all copies and that both that the copyright notice and this
+  16:./Board/LEDs.h ****   permission notice and warranty disclaimer appear in supporting 
+  17:./Board/LEDs.h ****   documentation, and that the name of the author not be used in 
+  18:./Board/LEDs.h ****   advertising or publicity pertaining to distribution of the 
+  19:./Board/LEDs.h ****   software without specific, written prior permission.
+  20:./Board/LEDs.h **** 
+  21:./Board/LEDs.h ****   The author disclaim all warranties with regard to this
+  22:./Board/LEDs.h ****   software, including all implied warranties of merchantability
+  23:./Board/LEDs.h ****   and fitness.  In no event shall the author be liable for any
+  24:./Board/LEDs.h ****   special, indirect or consequential damages or any damages
+  25:./Board/LEDs.h ****   whatsoever resulting from loss of use, data or profits, whether
+  26:./Board/LEDs.h ****   in an action of contract, negligence or other tortious action,
+  27:./Board/LEDs.h ****   arising out of or in connection with the use or performance of
+  28:./Board/LEDs.h ****   this software.
+  29:./Board/LEDs.h **** */
+  30:./Board/LEDs.h **** 
+  31:./Board/LEDs.h **** /*
+  32:./Board/LEDs.h ****    Board LEDs driver for the Benito board, from www.dorkbotpdx.org.
+  33:./Board/LEDs.h **** */
+  34:./Board/LEDs.h **** 
+  35:./Board/LEDs.h **** #ifndef __LEDS_ARDUINOUNO_H__
+  36:./Board/LEDs.h **** #define __LEDS_ARDUINOUNO_H__
+  37:./Board/LEDs.h **** 
+  38:./Board/LEDs.h **** 	/* Includes: */
+  39:./Board/LEDs.h **** 		#include <avr/io.h>
+  40:./Board/LEDs.h **** 
+  41:./Board/LEDs.h **** /* Enable C linkage for C++ Compilers: */
+  42:./Board/LEDs.h **** 		#if defined(__cplusplus)
+  43:./Board/LEDs.h **** 			extern "C" {
+  44:./Board/LEDs.h **** 		#endif
+  45:./Board/LEDs.h **** 
+  46:./Board/LEDs.h **** 	/* Preprocessor Checks: */
+  47:./Board/LEDs.h **** 		#if !defined(INCLUDE_FROM_LEDS_H)
+  48:./Board/LEDs.h **** 			#error Do not include this file directly. Include LUFA/Drivers/Board/LEDS.h instead.
+  49:./Board/LEDs.h **** 		#endif
+  50:./Board/LEDs.h **** 
+  51:./Board/LEDs.h **** 	/* Public Interface - May be used in end-application: */
+  52:./Board/LEDs.h **** 		/* Macros: */
+  53:./Board/LEDs.h **** 			/** LED mask for the first LED on the board. */
+  54:./Board/LEDs.h **** 			#define LEDS_LED1        (1 << 5)
+  55:./Board/LEDs.h **** 
+  56:./Board/LEDs.h **** 			/** LED mask for the second LED on the board. */
+  57:./Board/LEDs.h **** 			#define LEDS_LED2        (1 << 4)
+  58:./Board/LEDs.h **** 
+  59:./Board/LEDs.h **** 			/** LED mask for all the LEDs on the board. */
+  60:./Board/LEDs.h **** 			#define LEDS_ALL_LEDS    (LEDS_LED1 | LEDS_LED2)
+  61:./Board/LEDs.h **** 
+  62:./Board/LEDs.h **** 			/** LED mask for the none of the board LEDs */
+  63:./Board/LEDs.h **** 			#define LEDS_NO_LEDS     0
+  64:./Board/LEDs.h **** 
+  65:./Board/LEDs.h **** 		/* Inline Functions: */
+  66:./Board/LEDs.h **** 		#if !defined(__DOXYGEN__)
+  67:./Board/LEDs.h **** 			static inline void LEDs_Init(void)
+  68:./Board/LEDs.h **** 			{
+  69:./Board/LEDs.h **** 				DDRD  |= LEDS_ALL_LEDS;
+  70:./Board/LEDs.h **** 				PORTD |= LEDS_ALL_LEDS;
+  71:./Board/LEDs.h **** 			}
+  72:./Board/LEDs.h **** 			
+  73:./Board/LEDs.h **** 			static inline void LEDs_TurnOnLEDs(const uint8_t LEDMask)
+  74:./Board/LEDs.h **** 			{
+  75:./Board/LEDs.h **** 				PORTD &= ~LEDMask;
+  76:./Board/LEDs.h **** 			}
+  77:./Board/LEDs.h **** 
+  78:./Board/LEDs.h **** 			static inline void LEDs_TurnOffLEDs(const uint8_t LEDMask)
+  79:./Board/LEDs.h **** 			{
+  80:./Board/LEDs.h **** 				PORTD |= LEDMask;
+  81:./Board/LEDs.h **** 			}
+  82:./Board/LEDs.h **** 
+  83:./Board/LEDs.h **** 			static inline void LEDs_SetAllLEDs(const uint8_t LEDMask)
+  84:./Board/LEDs.h **** 			{
+ 160               		.loc 3 84 0
+ 161               		.cfi_startproc
+ 162               	.LVL11:
+ 163               	/* prologue: function */
+ 164               	/* frame size = 0 */
+ 165               	/* stack size = 0 */
+ 166               	.L__stack_usage = 0
+  85:./Board/LEDs.h **** 				PORTD = ((PORTD | LEDS_ALL_LEDS) & ~LEDMask);
+ 167               		.loc 3 85 0
+ 168 0000 9BB1      		in r25,0xb
+ 169 0002 8095      		com r24
+ 170               	.LVL12:
+ 171 0004 9063      		ori r25,lo8(48)
+ 172 0006 8923      		and r24,r25
+ 173               	.LVL13:
+ 174 0008 8BB9      		out 0xb,r24
+ 175 000a 0895      		ret
+ 176               		.cfi_endproc
+ 177               	.LFE77:
+ 179               		.section	.text.RingBuffer_GetCount.isra.1,"ax",@progbits
+ 181               	RingBuffer_GetCount.isra.1:
+ 182               	.LFB95:
+ 107:Lib/LightweightRingBuff.h **** 		static inline RingBuff_Count_t RingBuffer_GetCount(RingBuff_t* const Buffer)
+ 183               		.loc 1 107 0
+ 184               		.cfi_startproc
+ 185               	/* prologue: function */
+ 186               	/* frame size = 0 */
+ 187               	/* stack size = 0 */
+ 188               	.L__stack_usage = 0
+ 189               	.LVL14:
+ 190               	.LBB45:
+ 111:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+ 191               		.loc 1 111 0
+ 192 0000 2FB7      		in r18,__SREG__
+ 193               	.LVL15:
+ 194               	.LBB46:
+ 195               	.LBB47:
+  50:/usr/lib/avr/include/util/atomic.h ****     cli();
+ 196               		.loc 2 50 0
+ 197               	/* #APP */
+ 198               	 ;  50 "/usr/lib/avr/include/util/atomic.h" 1
+ 199 0002 F894      		cli
+ 200               	 ;  0 "" 2
+ 201               	.LVL16:
+ 202               	/* #NOAPP */
+ 203               	.LBE47:
+ 204               	.LBE46:
+ 113:Lib/LightweightRingBuff.h **** 				Count = Buffer->Count;
+ 205               		.loc 1 113 0
+ 206 0004 FC01      		movw r30,r24
+ 207 0006 8081      		ld r24,Z
+ 208               	.LVL17:
+ 209               	.LBB48:
+ 210               	.LBB49:
+  70:/usr/lib/avr/include/util/atomic.h ****     SREG = *__s;
+ 211               		.loc 2 70 0
+ 212 0008 2FBF      		out __SREG__,r18
+ 213               		.loc 2 71 0
+ 214               	.LBE49:
+ 215               	.LBE48:
+ 216               	.LBE45:
+ 117:Lib/LightweightRingBuff.h **** 		}
+ 217               		.loc 1 117 0
+ 218 000a 0895      		ret
+ 219               		.cfi_endproc
+ 220               	.LFE95:
+ 222               		.section	.text.SetupHardware,"ax",@progbits
+ 223               	.global	SetupHardware
+ 225               	SetupHardware:
+ 226               	.LFB88:
+ 227               		.file 4 "Arduino-usbmidi.c"
+   1:Arduino-usbmidi.c **** /*
+   2:Arduino-usbmidi.c ****              LUFA Library
+   3:Arduino-usbmidi.c ****      Copyright (C) Dean Camera, 2010.
+   4:Arduino-usbmidi.c ****               
+   5:Arduino-usbmidi.c ****   dean [at] fourwalledcubicle [dot] com
+   6:Arduino-usbmidi.c ****       www.fourwalledcubicle.com
+   7:Arduino-usbmidi.c **** */
+   8:Arduino-usbmidi.c **** 
+   9:Arduino-usbmidi.c **** /*
+  10:Arduino-usbmidi.c ****   Copyright 2010  Dean Camera (dean [at] fourwalledcubicle [dot] com)
+  11:Arduino-usbmidi.c **** 
+  12:Arduino-usbmidi.c ****   Permission to use, copy, modify, distribute, and sell this 
+  13:Arduino-usbmidi.c ****   software and its documentation for any purpose is hereby granted
+  14:Arduino-usbmidi.c ****   without fee, provided that the above copyright notice appear in 
+  15:Arduino-usbmidi.c ****   all copies and that both that the copyright notice and this
+  16:Arduino-usbmidi.c ****   permission notice and warranty disclaimer appear in supporting 
+  17:Arduino-usbmidi.c ****   documentation, and that the name of the author not be used in 
+  18:Arduino-usbmidi.c ****   advertising or publicity pertaining to distribution of the 
+  19:Arduino-usbmidi.c ****   software without specific, written prior permission.
+  20:Arduino-usbmidi.c **** 
+  21:Arduino-usbmidi.c ****   The author disclaim all warranties with regard to this
+  22:Arduino-usbmidi.c ****   software, including all implied warranties of merchantability
+  23:Arduino-usbmidi.c ****   and fitness.  In no event shall the author be liable for any
+  24:Arduino-usbmidi.c ****   special, indirect or consequential damages or any damages
+  25:Arduino-usbmidi.c ****   whatsoever resulting from loss of use, data or profits, whether
+  26:Arduino-usbmidi.c ****   in an action of contract, negligence or other tortious action,
+  27:Arduino-usbmidi.c ****   arising out of or in connection with the use or performance of
+  28:Arduino-usbmidi.c ****   this software.
+  29:Arduino-usbmidi.c **** */
+  30:Arduino-usbmidi.c **** 
+  31:Arduino-usbmidi.c **** /*-
+  32:Arduino-usbmidi.c ****  * Copyright (c) 2011 Darran Hunt (darran [at] hunt dot net dot nz)
+  33:Arduino-usbmidi.c ****  * All rights reserved.
+  34:Arduino-usbmidi.c ****  *
+  35:Arduino-usbmidi.c ****  * Redistribution and use in source and binary forms, with or without
+  36:Arduino-usbmidi.c ****  * modification, are permitted provided that the following conditions
+  37:Arduino-usbmidi.c ****  * are met:
+  38:Arduino-usbmidi.c ****  * 1. Redistributions of source code must retain the above copyright
+  39:Arduino-usbmidi.c ****  *    notice, this list of conditions and the following disclaimer.
+  40:Arduino-usbmidi.c ****  * 2. Redistributions in binary form must reproduce the above copyright
+  41:Arduino-usbmidi.c ****  *    notice, this list of conditions and the following disclaimer in the
+  42:Arduino-usbmidi.c ****  *    documentation and/or other materials provided with the distribution.
+  43:Arduino-usbmidi.c ****  *
+  44:Arduino-usbmidi.c ****  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
+  45:Arduino-usbmidi.c ****  * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+  46:Arduino-usbmidi.c ****  * AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL
+  47:Arduino-usbmidi.c ****  * THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+  48:Arduino-usbmidi.c ****  * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+  49:Arduino-usbmidi.c ****  * PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
+  50:Arduino-usbmidi.c ****  * OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+  51:Arduino-usbmidi.c ****  * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+  52:Arduino-usbmidi.c ****  * OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+  53:Arduino-usbmidi.c ****  * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  54:Arduino-usbmidi.c ****  */
+  55:Arduino-usbmidi.c **** 
+  56:Arduino-usbmidi.c **** /** \file
+  57:Arduino-usbmidi.c ****  *
+  58:Arduino-usbmidi.c ****  *  Main source file for the Arduino-keyboard project. This file contains the main tasks of
+  59:Arduino-usbmidi.c ****  *  the project and is responsible for the initial application hardware configuration.
+  60:Arduino-usbmidi.c ****  */
+  61:Arduino-usbmidi.c **** 
+  62:Arduino-usbmidi.c **** #include "Arduino-usbmidi.h"
+  63:Arduino-usbmidi.c **** 
+  64:Arduino-usbmidi.c **** /** LUFA MIDI Class driver interface configuration and state information. This structure is
+  65:Arduino-usbmidi.c ****  *  passed to all MIDI Class driver functions, so that multiple instances of the same class
+  66:Arduino-usbmidi.c ****  *  within a device can be differentiated from one another.
+  67:Arduino-usbmidi.c ****  */
+  68:Arduino-usbmidi.c **** USB_ClassInfo_MIDI_Device_t Keyboard_MIDI_Interface = {
+  69:Arduino-usbmidi.c ****     .Config = {
+  70:Arduino-usbmidi.c **** 	.StreamingInterfaceNumber = 1,
+  71:Arduino-usbmidi.c **** 
+  72:Arduino-usbmidi.c **** 	.DataINEndpointNumber      = MIDI_STREAM_IN_EPNUM,
+  73:Arduino-usbmidi.c **** 	.DataINEndpointSize        = MIDI_STREAM_EPSIZE,
+  74:Arduino-usbmidi.c **** 	.DataINEndpointDoubleBank  = false,
+  75:Arduino-usbmidi.c **** 
+  76:Arduino-usbmidi.c **** 	.DataOUTEndpointNumber     = MIDI_STREAM_OUT_EPNUM,
+  77:Arduino-usbmidi.c **** 	.DataOUTEndpointSize       = MIDI_STREAM_EPSIZE,
+  78:Arduino-usbmidi.c **** 	.DataOUTEndpointDoubleBank = false,
+  79:Arduino-usbmidi.c ****     },
+  80:Arduino-usbmidi.c **** };
+  81:Arduino-usbmidi.c **** 
+  82:Arduino-usbmidi.c **** /** Circular buffer to hold data from the host before it is sent to the device via the serial port.
+  83:Arduino-usbmidi.c **** RingBuff_t USBtoUSART_Buffer;
+  84:Arduino-usbmidi.c **** 
+  85:Arduino-usbmidi.c **** /** Circular buffer to hold data from the serial port before it is sent to the host. */
+  86:Arduino-usbmidi.c **** RingBuff_t USARTtoUSB_Buffer;
+  87:Arduino-usbmidi.c **** 
+  88:Arduino-usbmidi.c **** #define LED_ON_TICKS 10000	/* Number of ticks to leave LEDs on */
+  89:Arduino-usbmidi.c **** 
+  90:Arduino-usbmidi.c **** /** Main program entry point. This routine contains the overall program flow, including initial
+  91:Arduino-usbmidi.c ****  *  setup of all components and the main program loop.
+  92:Arduino-usbmidi.c ****  */
+  93:Arduino-usbmidi.c **** int main(void)
+  94:Arduino-usbmidi.c **** {
+  95:Arduino-usbmidi.c ****     MIDI_EventPacket_t midiEvent;
+  96:Arduino-usbmidi.c ****     struct {
+  97:Arduino-usbmidi.c **** 	uint8_t command;
+  98:Arduino-usbmidi.c **** 	uint8_t channel;
+  99:Arduino-usbmidi.c **** 	uint8_t data2;
+ 100:Arduino-usbmidi.c **** 	uint8_t data3;
+ 101:Arduino-usbmidi.c ****     } midiMsg;
+ 102:Arduino-usbmidi.c ****     int ind;
+ 103:Arduino-usbmidi.c **** 
+ 104:Arduino-usbmidi.c ****     int led1_ticks = 0;
+ 105:Arduino-usbmidi.c ****     int led2_ticks = 0;
+ 106:Arduino-usbmidi.c **** 
+ 107:Arduino-usbmidi.c ****     SetupHardware();
+ 108:Arduino-usbmidi.c **** 
+ 109:Arduino-usbmidi.c ****     RingBuffer_InitBuffer(&USBtoUSART_Buffer);
+ 110:Arduino-usbmidi.c ****     RingBuffer_InitBuffer(&USARTtoUSB_Buffer);
+ 111:Arduino-usbmidi.c **** 
+ 112:Arduino-usbmidi.c ****     LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+ 113:Arduino-usbmidi.c ****     sei();
+ 114:Arduino-usbmidi.c **** 
+ 115:Arduino-usbmidi.c ****     for (;;) {
+ 116:Arduino-usbmidi.c **** 	RingBuff_Count_t BufferCount = RingBuffer_GetCount(&USARTtoUSB_Buffer);
+ 117:Arduino-usbmidi.c **** 
+ 118:Arduino-usbmidi.c **** 	/* See if we have a message yet */
+ 119:Arduino-usbmidi.c **** 	if (BufferCount >= 4) {
+ 120:Arduino-usbmidi.c **** 	    /* Read in the message from the serial buffer */
+ 121:Arduino-usbmidi.c **** 	    for (ind=0; ind<4; ind++) {
+ 122:Arduino-usbmidi.c **** 		((uint8_t *)&midiMsg)[ind] = RingBuffer_Remove(&USARTtoUSB_Buffer);
+ 123:Arduino-usbmidi.c **** 	    }
+ 124:Arduino-usbmidi.c **** 
+ 125:Arduino-usbmidi.c **** 	    /* Build a midi event to send via USB */
+ 126:Arduino-usbmidi.c **** 	    midiEvent.CableNumber = 0;
+ 127:Arduino-usbmidi.c **** 	    midiEvent.Command = midiMsg.command >> 4;
+ 128:Arduino-usbmidi.c **** 	    midiEvent.Data1 = (midiMsg.command & 0xF0) | ((midiMsg.channel-1) & 0x0F);
+ 129:Arduino-usbmidi.c **** 	    midiEvent.Data2 = midiMsg.data2;
+ 130:Arduino-usbmidi.c **** 	    midiEvent.Data3 = midiMsg.data3;
+ 131:Arduino-usbmidi.c **** 
+ 132:Arduino-usbmidi.c **** 	    MIDI_Device_SendEventPacket(&Keyboard_MIDI_Interface, &midiEvent);
+ 133:Arduino-usbmidi.c **** 	    MIDI_Device_Flush(&Keyboard_MIDI_Interface);
+ 134:Arduino-usbmidi.c **** 
+ 135:Arduino-usbmidi.c **** 	    /* Turn on the TX led and starts its timer */
+ 136:Arduino-usbmidi.c **** 	    LEDs_TurnOnLEDs(LEDS_LED1);
+ 137:Arduino-usbmidi.c **** 	    led1_ticks = LED_ON_TICKS;
+ 138:Arduino-usbmidi.c **** 	}
+ 139:Arduino-usbmidi.c **** 	
+ 140:Arduino-usbmidi.c **** 	/* Turn off the Tx LED when the tick count reaches zero */
+ 141:Arduino-usbmidi.c **** 	if (led1_ticks) {
+ 142:Arduino-usbmidi.c **** 	    led1_ticks--;
+ 143:Arduino-usbmidi.c **** 	    if (led1_ticks == 0) {
+ 144:Arduino-usbmidi.c **** 		LEDs_TurnOffLEDs(LEDS_LED1);
+ 145:Arduino-usbmidi.c **** 	    }
+ 146:Arduino-usbmidi.c **** 	}
+ 147:Arduino-usbmidi.c **** 
+ 148:Arduino-usbmidi.c **** 	if (MIDI_Device_ReceiveEventPacket(&Keyboard_MIDI_Interface, &midiEvent)) {
+ 149:Arduino-usbmidi.c **** 	    RingBuff_Count_t count = RingBuffer_GetCount(&USBtoUSART_Buffer);
+ 150:Arduino-usbmidi.c **** 	    /* Room to send a message? */
+ 151:Arduino-usbmidi.c **** 	    if ((BUFFER_SIZE - count) >= sizeof(midiMsg)) {
+ 152:Arduino-usbmidi.c **** 		midiMsg.command = midiEvent.Command << 4;
+ 153:Arduino-usbmidi.c **** 		midiMsg.channel = (midiEvent.Data1 & 0x0F) + 1;
+ 154:Arduino-usbmidi.c **** 		midiMsg.data2 = midiEvent.Data2;
+ 155:Arduino-usbmidi.c **** 		midiMsg.data3 = midiEvent.Data3;
+ 156:Arduino-usbmidi.c **** 
+ 157:Arduino-usbmidi.c **** 		for (ind=0; ind<sizeof(midiMsg); ind++) {
+ 158:Arduino-usbmidi.c **** 		    RingBuffer_Insert(&USBtoUSART_Buffer, ((uint8_t *)&midiMsg)[ind]);
+ 159:Arduino-usbmidi.c **** 		}
+ 160:Arduino-usbmidi.c **** 
+ 161:Arduino-usbmidi.c **** 		/* Turn on the RX led and start its timer */
+ 162:Arduino-usbmidi.c **** 		LEDs_TurnOnLEDs(LEDS_LED2);
+ 163:Arduino-usbmidi.c **** 		led2_ticks = LED_ON_TICKS;
+ 164:Arduino-usbmidi.c **** 	    } else {
+ 165:Arduino-usbmidi.c **** 		/* Turn on the RX led and leave it on to indicate the
+ 166:Arduino-usbmidi.c **** 		 * buffer is full and the sketch is not reading it 
+ 167:Arduino-usbmidi.c **** 		 * fast enough.
+ 168:Arduino-usbmidi.c **** 		 */
+ 169:Arduino-usbmidi.c **** 		LEDs_TurnOnLEDs(LEDS_LED2);
+ 170:Arduino-usbmidi.c **** 	    }
+ 171:Arduino-usbmidi.c **** 
+ 172:Arduino-usbmidi.c **** 	    /* if there's no room in the serial buffer the message gets dropped */
+ 173:Arduino-usbmidi.c **** 	}
+ 174:Arduino-usbmidi.c **** 
+ 175:Arduino-usbmidi.c **** 	/* Turn off the RX LED when the tick count reaches zero */
+ 176:Arduino-usbmidi.c **** 	if (led2_ticks) {
+ 177:Arduino-usbmidi.c **** 	    led2_ticks--;
+ 178:Arduino-usbmidi.c **** 	    if (led2_ticks == 0) {
+ 179:Arduino-usbmidi.c **** 		LEDs_TurnOffLEDs(LEDS_LED2);
+ 180:Arduino-usbmidi.c **** 	    }
+ 181:Arduino-usbmidi.c **** 	}
+ 182:Arduino-usbmidi.c **** 
+ 183:Arduino-usbmidi.c **** 	/* any data to send to main processor? */
+ 184:Arduino-usbmidi.c **** 	if (!(RingBuffer_IsEmpty(&USBtoUSART_Buffer))) {
+ 185:Arduino-usbmidi.c **** 	    Serial_TxByte(RingBuffer_Remove(&USBtoUSART_Buffer));
+ 186:Arduino-usbmidi.c **** 	}
+ 187:Arduino-usbmidi.c **** 
+ 188:Arduino-usbmidi.c **** 	MIDI_Device_USBTask(&Keyboard_MIDI_Interface);
+ 189:Arduino-usbmidi.c **** 	USB_USBTask();
+ 190:Arduino-usbmidi.c ****     }
+ 191:Arduino-usbmidi.c **** }
+ 192:Arduino-usbmidi.c **** 
+ 193:Arduino-usbmidi.c **** /** Configures the board hardware and chip peripherals for the demo's functionality. */
+ 194:Arduino-usbmidi.c **** void SetupHardware(void)
+ 195:Arduino-usbmidi.c **** {
+ 228               		.loc 4 195 0
+ 229               		.cfi_startproc
+ 230 0000 BF92      		push r11
+ 231               	.LCFI0:
+ 232               		.cfi_def_cfa_offset 3
+ 233               		.cfi_offset 11, -2
+ 234 0002 CF92      		push r12
+ 235               	.LCFI1:
+ 236               		.cfi_def_cfa_offset 4
+ 237               		.cfi_offset 12, -3
+ 238 0004 DF92      		push r13
+ 239               	.LCFI2:
+ 240               		.cfi_def_cfa_offset 5
+ 241               		.cfi_offset 13, -4
+ 242 0006 EF92      		push r14
+ 243               	.LCFI3:
+ 244               		.cfi_def_cfa_offset 6
+ 245               		.cfi_offset 14, -5
+ 246 0008 FF92      		push r15
+ 247               	.LCFI4:
+ 248               		.cfi_def_cfa_offset 7
+ 249               		.cfi_offset 15, -6
+ 250 000a 0F93      		push r16
+ 251               	.LCFI5:
+ 252               		.cfi_def_cfa_offset 8
+ 253               		.cfi_offset 16, -7
+ 254 000c 1F93      		push r17
+ 255               	.LCFI6:
+ 256               		.cfi_def_cfa_offset 9
+ 257               		.cfi_offset 17, -8
+ 258 000e CF93      		push r28
+ 259               	.LCFI7:
+ 260               		.cfi_def_cfa_offset 10
+ 261               		.cfi_offset 28, -9
+ 262 0010 DF93      		push r29
+ 263               	.LCFI8:
+ 264               		.cfi_def_cfa_offset 11
+ 265               		.cfi_offset 29, -10
+ 266               	/* prologue: function */
+ 267               	/* frame size = 0 */
+ 268               	/* stack size = 9 */
+ 269               	.L__stack_usage = 9
+ 196:Arduino-usbmidi.c **** 	/* Disable watchdog if enabled by bootloader/fuses */
+ 197:Arduino-usbmidi.c **** 	MCUSR &= ~(1 << WDRF);
+ 270               		.loc 4 197 0
+ 271 0012 84B7      		in r24,0x34
+ 272 0014 877F      		andi r24,lo8(-9)
+ 273 0016 84BF      		out 0x34,r24
+ 198:Arduino-usbmidi.c **** 	wdt_disable();
+ 274               		.loc 4 198 0
+ 275 0018 88E1      		ldi r24,lo8(24)
+ 276               	/* #APP */
+ 277               	 ;  198 "Arduino-usbmidi.c" 1
+ 278 001a 0FB6      		in __tmp_reg__, __SREG__
+ 279 001c F894      		cli
+ 280 001e 8093 6000 		sts 96, r24
+ 281 0022 1092 6000 		sts 96, __zero_reg__
+ 282 0026 0FBE      		out __SREG__,__tmp_reg__
+ 283               		
+ 284               	 ;  0 "" 2
+ 285               	.LVL18:
+ 286               	/* #NOAPP */
+ 287               	.LBB54:
+ 288               	.LBB55:
+ 289               		.file 5 "../../LUFA/Drivers/Peripheral/Serial.h"
+   1:../../LUFA/Drivers/Peripheral/Serial.h **** /*
+   2:../../LUFA/Drivers/Peripheral/Serial.h ****              LUFA Library
+   3:../../LUFA/Drivers/Peripheral/Serial.h ****      Copyright (C) Dean Camera, 2010.
+   4:../../LUFA/Drivers/Peripheral/Serial.h ****               
+   5:../../LUFA/Drivers/Peripheral/Serial.h ****   dean [at] fourwalledcubicle [dot] com
+   6:../../LUFA/Drivers/Peripheral/Serial.h ****       www.fourwalledcubicle.com
+   7:../../LUFA/Drivers/Peripheral/Serial.h **** */
+   8:../../LUFA/Drivers/Peripheral/Serial.h **** 
+   9:../../LUFA/Drivers/Peripheral/Serial.h **** /*
+  10:../../LUFA/Drivers/Peripheral/Serial.h ****   Copyright 2010  Dean Camera (dean [at] fourwalledcubicle [dot] com)
+  11:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  12:../../LUFA/Drivers/Peripheral/Serial.h ****   Permission to use, copy, modify, distribute, and sell this 
+  13:../../LUFA/Drivers/Peripheral/Serial.h ****   software and its documentation for any purpose is hereby granted
+  14:../../LUFA/Drivers/Peripheral/Serial.h ****   without fee, provided that the above copyright notice appear in 
+  15:../../LUFA/Drivers/Peripheral/Serial.h ****   all copies and that both that the copyright notice and this
+  16:../../LUFA/Drivers/Peripheral/Serial.h ****   permission notice and warranty disclaimer appear in supporting 
+  17:../../LUFA/Drivers/Peripheral/Serial.h ****   documentation, and that the name of the author not be used in 
+  18:../../LUFA/Drivers/Peripheral/Serial.h ****   advertising or publicity pertaining to distribution of the 
+  19:../../LUFA/Drivers/Peripheral/Serial.h ****   software without specific, written prior permission.
+  20:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  21:../../LUFA/Drivers/Peripheral/Serial.h ****   The author disclaim all warranties with regard to this
+  22:../../LUFA/Drivers/Peripheral/Serial.h ****   software, including all implied warranties of merchantability
+  23:../../LUFA/Drivers/Peripheral/Serial.h ****   and fitness.  In no event shall the author be liable for any
+  24:../../LUFA/Drivers/Peripheral/Serial.h ****   special, indirect or consequential damages or any damages
+  25:../../LUFA/Drivers/Peripheral/Serial.h ****   whatsoever resulting from loss of use, data or profits, whether
+  26:../../LUFA/Drivers/Peripheral/Serial.h ****   in an action of contract, negligence or other tortious action,
+  27:../../LUFA/Drivers/Peripheral/Serial.h ****   arising out of or in connection with the use or performance of
+  28:../../LUFA/Drivers/Peripheral/Serial.h ****   this software.
+  29:../../LUFA/Drivers/Peripheral/Serial.h **** */
+  30:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  31:../../LUFA/Drivers/Peripheral/Serial.h **** /** \file
+  32:../../LUFA/Drivers/Peripheral/Serial.h ****  *  \brief Master include file for the USART peripheral driver.
+  33:../../LUFA/Drivers/Peripheral/Serial.h ****  *
+  34:../../LUFA/Drivers/Peripheral/Serial.h ****  *  Driver for the USART subsystem on supported USB AVRs.
+  35:../../LUFA/Drivers/Peripheral/Serial.h ****  */
+  36:../../LUFA/Drivers/Peripheral/Serial.h ****  
+  37:../../LUFA/Drivers/Peripheral/Serial.h **** /** \ingroup Group_PeripheralDrivers
+  38:../../LUFA/Drivers/Peripheral/Serial.h ****  *  @defgroup Group_Serial Serial USART Driver - LUFA/Drivers/Peripheral/Serial.h
+  39:../../LUFA/Drivers/Peripheral/Serial.h ****  *
+  40:../../LUFA/Drivers/Peripheral/Serial.h ****  *  \section Sec_Dependencies Module Source Dependencies
+  41:../../LUFA/Drivers/Peripheral/Serial.h ****  *  The following files must be built with any user project that uses this module:
+  42:../../LUFA/Drivers/Peripheral/Serial.h ****  *    - LUFA/Drivers/Peripheral/Serial.c <i>(Makefile source module name: LUFA_SRC_SERIAL)</i>
+  43:../../LUFA/Drivers/Peripheral/Serial.h ****  *
+  44:../../LUFA/Drivers/Peripheral/Serial.h ****  *  \section Module Description
+  45:../../LUFA/Drivers/Peripheral/Serial.h ****  *  Hardware serial USART driver. This module provides an easy to use driver for
+  46:../../LUFA/Drivers/Peripheral/Serial.h ****  *  the setup of and transfer of data over the AVR's USART port.
+  47:../../LUFA/Drivers/Peripheral/Serial.h ****  *
+  48:../../LUFA/Drivers/Peripheral/Serial.h ****  *  @{
+  49:../../LUFA/Drivers/Peripheral/Serial.h ****  */
+  50:../../LUFA/Drivers/Peripheral/Serial.h ****  
+  51:../../LUFA/Drivers/Peripheral/Serial.h **** #ifndef __SERIAL_H__
+  52:../../LUFA/Drivers/Peripheral/Serial.h **** #define __SERIAL_H__
+  53:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  54:../../LUFA/Drivers/Peripheral/Serial.h **** 	/* Includes: */
+  55:../../LUFA/Drivers/Peripheral/Serial.h **** 		#include <avr/io.h>
+  56:../../LUFA/Drivers/Peripheral/Serial.h **** 		#include <avr/pgmspace.h>
+  57:../../LUFA/Drivers/Peripheral/Serial.h **** 		#include <stdbool.h>
+  58:../../LUFA/Drivers/Peripheral/Serial.h **** 		
+  59:../../LUFA/Drivers/Peripheral/Serial.h **** 		#include "../../Common/Common.h"
+  60:../../LUFA/Drivers/Peripheral/Serial.h **** 		#include "../Misc/TerminalCodes.h"
+  61:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  62:../../LUFA/Drivers/Peripheral/Serial.h **** 	/* Enable C linkage for C++ Compilers: */
+  63:../../LUFA/Drivers/Peripheral/Serial.h **** 		#if defined(__cplusplus)
+  64:../../LUFA/Drivers/Peripheral/Serial.h **** 			extern "C" {
+  65:../../LUFA/Drivers/Peripheral/Serial.h **** 		#endif
+  66:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  67:../../LUFA/Drivers/Peripheral/Serial.h **** 	/* Public Interface - May be used in end-application: */
+  68:../../LUFA/Drivers/Peripheral/Serial.h **** 		/* Macros: */
+  69:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Macro for calculating the baud value from a given baud rate when the U2X (double speed) bit 
+  70:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  not set.
+  71:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+  72:../../LUFA/Drivers/Peripheral/Serial.h **** 			#define SERIAL_UBBRVAL(baud)    ((((F_CPU / 16) + (baud / 2)) / (baud)) - 1)
+  73:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  74:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Macro for calculating the baud value from a given baud rate when the U2X (double speed) bit 
+  75:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  set.
+  76:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+  77:../../LUFA/Drivers/Peripheral/Serial.h **** 			#define SERIAL_2X_UBBRVAL(baud) ((((F_CPU / 8) + (baud / 2)) / (baud)) - 1)
+  78:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  79:../../LUFA/Drivers/Peripheral/Serial.h **** 		/* Function Prototypes: */
+  80:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Transmits a given string located in program space (FLASH) through the USART.
+  81:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *
+  82:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \param[in] FlashStringPtr  Pointer to a string located in program space.
+  83:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+  84:../../LUFA/Drivers/Peripheral/Serial.h **** 			void Serial_TxString_P(const char* FlashStringPtr) ATTR_NON_NULL_PTR_ARG(1);
+  85:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  86:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Transmits a given string located in SRAM memory through the USART.
+  87:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *
+  88:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \param[in] StringPtr  Pointer to a string located in SRAM space.
+  89:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+  90:../../LUFA/Drivers/Peripheral/Serial.h **** 			void Serial_TxString(const char* StringPtr) ATTR_NON_NULL_PTR_ARG(1);
+  91:../../LUFA/Drivers/Peripheral/Serial.h **** 
+  92:../../LUFA/Drivers/Peripheral/Serial.h **** 		/* Inline Functions: */
+  93:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Initializes the USART, ready for serial data transmission and reception. This initializes th
+  94:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  standard 8-bit, no parity, 1 stop bit settings suitable for most applications.
+  95:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *
+  96:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \param[in] BaudRate     Serial baud rate, in bits per second.
+  97:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \param[in] DoubleSpeed  Enables double speed mode when set, halving the sample time to doubl
+  98:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+  99:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline void Serial_Init(const uint32_t BaudRate,
+ 100:../../LUFA/Drivers/Peripheral/Serial.h **** 			                               const bool DoubleSpeed)
+ 101:../../LUFA/Drivers/Peripheral/Serial.h **** 			{
+ 102:../../LUFA/Drivers/Peripheral/Serial.h **** 				UBRR1  = (DoubleSpeed ? SERIAL_2X_UBBRVAL(BaudRate) : SERIAL_UBBRVAL(BaudRate));
+ 290               		.loc 5 102 0
+ 291 0028 8CEC      		ldi r24,lo8(-52)
+ 292 002a C82E      		mov r12,r24
+ 293 002c D12C      		mov r13,__zero_reg__
+ 294 002e 88E0      		ldi r24,lo8(8)
+ 295 0030 90E0      		ldi r25,0
+ 296 0032 F601      		movw r30,r12
+ 297 0034 9183      		std Z+1,r25
+ 298 0036 8083      		st Z,r24
+ 103:../../LUFA/Drivers/Peripheral/Serial.h **** 
+ 104:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1C = ((1 << UCSZ11) | (1 << UCSZ10));
+ 299               		.loc 5 104 0
+ 300 0038 9AEC      		ldi r25,lo8(-54)
+ 301 003a E92E      		mov r14,r25
+ 302 003c F12C      		mov r15,__zero_reg__
+ 303 003e 26E0      		ldi r18,lo8(6)
+ 304 0040 B22E      		mov r11,r18
+ 305 0042 F701      		movw r30,r14
+ 306 0044 B082      		st Z,r11
+ 105:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1A = (DoubleSpeed ? (1 << U2X1) : 0);
+ 307               		.loc 5 105 0
+ 308 0046 08EC      		ldi r16,lo8(-56)
+ 309 0048 10E0      		ldi r17,0
+ 310 004a F801      		movw r30,r16
+ 311 004c 1082      		st Z,__zero_reg__
+ 106:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1B = ((1 << TXEN1)  | (1 << RXEN1));
+ 312               		.loc 5 106 0
+ 313 004e C9EC      		ldi r28,lo8(-55)
+ 314 0050 D0E0      		ldi r29,0
+ 315 0052 88E1      		ldi r24,lo8(24)
+ 316 0054 8883      		st Y,r24
+ 107:../../LUFA/Drivers/Peripheral/Serial.h **** 				
+ 108:../../LUFA/Drivers/Peripheral/Serial.h **** 				DDRD  |= (1 << 3);
+ 317               		.loc 5 108 0
+ 318 0056 539A      		sbi 0xa,3
+ 109:../../LUFA/Drivers/Peripheral/Serial.h **** 				PORTD |= (1 << 2);
+ 319               		.loc 5 109 0
+ 320 0058 5A9A      		sbi 0xb,2
+ 321               	.LBE55:
+ 322               	.LBE54:
+ 323               	.LBB56:
+ 324               	.LBB57:
+  69:./Board/LEDs.h **** 				DDRD  |= LEDS_ALL_LEDS;
+ 325               		.loc 3 69 0
+ 326 005a 8AB1      		in r24,0xa
+ 327 005c 8063      		ori r24,lo8(48)
+ 328 005e 8AB9      		out 0xa,r24
+  70:./Board/LEDs.h **** 				PORTD |= LEDS_ALL_LEDS;
+ 329               		.loc 3 70 0
+ 330 0060 8BB1      		in r24,0xb
+ 331 0062 8063      		ori r24,lo8(48)
+ 332 0064 8BB9      		out 0xb,r24
+ 333               	.LBE57:
+ 334               	.LBE56:
+ 199:Arduino-usbmidi.c **** 
+ 200:Arduino-usbmidi.c **** 	/* Hardware Initialization */
+ 201:Arduino-usbmidi.c **** 	Serial_Init(115200, false);
+ 202:Arduino-usbmidi.c **** 	LEDs_Init();
+ 203:Arduino-usbmidi.c **** 	USB_Init();
+ 335               		.loc 4 203 0
+ 336 0066 0E94 0000 		call USB_Init
+ 337               	.LVL19:
+ 204:Arduino-usbmidi.c **** 
+ 205:Arduino-usbmidi.c **** 	/* Start the flush timer so that overflows occur rapidly to push received bytes to the USB interfa
+ 206:Arduino-usbmidi.c **** 	TCCR0B = (1 << CS02);
+ 338               		.loc 4 206 0
+ 339 006a 84E0      		ldi r24,lo8(4)
+ 340 006c 85BD      		out 0x25,r24
+ 207:Arduino-usbmidi.c **** 	
+ 208:Arduino-usbmidi.c **** 	/* Must turn off USART before reconfiguring it, otherwise incorrect operation may occur */
+ 209:Arduino-usbmidi.c **** 	UCSR1B = 0;
+ 341               		.loc 4 209 0
+ 342 006e 1882      		st Y,__zero_reg__
+ 210:Arduino-usbmidi.c **** 	UCSR1A = 0;
+ 343               		.loc 4 210 0
+ 344 0070 F801      		movw r30,r16
+ 345 0072 1082      		st Z,__zero_reg__
+ 211:Arduino-usbmidi.c **** 	UCSR1C = 0;
+ 346               		.loc 4 211 0
+ 347 0074 F701      		movw r30,r14
+ 348 0076 1082      		st Z,__zero_reg__
+ 212:Arduino-usbmidi.c **** 
+ 213:Arduino-usbmidi.c **** 	UBRR1  = SERIAL_2X_UBBRVAL(115200);
+ 349               		.loc 4 213 0
+ 350 0078 80E1      		ldi r24,lo8(16)
+ 351 007a 90E0      		ldi r25,0
+ 352 007c F601      		movw r30,r12
+ 353 007e 9183      		std Z+1,r25
+ 354 0080 8083      		st Z,r24
+ 214:Arduino-usbmidi.c **** 
+ 215:Arduino-usbmidi.c **** 	UCSR1C = ((1 << UCSZ11) | (1 << UCSZ10));
+ 355               		.loc 4 215 0
+ 356 0082 F701      		movw r30,r14
+ 357 0084 B082      		st Z,r11
+ 216:Arduino-usbmidi.c **** 	UCSR1A = (1 << U2X1);
+ 358               		.loc 4 216 0
+ 359 0086 82E0      		ldi r24,lo8(2)
+ 360 0088 F801      		movw r30,r16
+ 361 008a 8083      		st Z,r24
+ 217:Arduino-usbmidi.c **** 	UCSR1B = ((1 << RXCIE1) | (1 << TXEN1) | (1 << RXEN1));
+ 362               		.loc 4 217 0
+ 363 008c 88E9      		ldi r24,lo8(-104)
+ 364 008e 8883      		st Y,r24
+ 365               	/* epilogue start */
+ 218:Arduino-usbmidi.c **** }
+ 366               		.loc 4 218 0
+ 367 0090 DF91      		pop r29
+ 368 0092 CF91      		pop r28
+ 369 0094 1F91      		pop r17
+ 370 0096 0F91      		pop r16
+ 371 0098 FF90      		pop r15
+ 372 009a EF90      		pop r14
+ 373 009c DF90      		pop r13
+ 374 009e CF90      		pop r12
+ 375 00a0 BF90      		pop r11
+ 376 00a2 0895      		ret
+ 377               		.cfi_endproc
+ 378               	.LFE88:
+ 380               		.section	.text.startup.main,"ax",@progbits
+ 381               	.global	main
+ 383               	main:
+ 384               	.LFB87:
+  94:Arduino-usbmidi.c **** {
+ 385               		.loc 4 94 0
+ 386               		.cfi_startproc
+ 387 0000 CF93      		push r28
+ 388               	.LCFI9:
+ 389               		.cfi_def_cfa_offset 3
+ 390               		.cfi_offset 28, -2
+ 391 0002 DF93      		push r29
+ 392               	.LCFI10:
+ 393               		.cfi_def_cfa_offset 4
+ 394               		.cfi_offset 29, -3
+ 395 0004 CDB7      		in r28,__SP_L__
+ 396 0006 DEB7      		in r29,__SP_H__
+ 397               	.LCFI11:
+ 398               		.cfi_def_cfa_register 28
+ 399 0008 2897      		sbiw r28,8
+ 400               	.LCFI12:
+ 401               		.cfi_def_cfa_offset 12
+ 402 000a 0FB6      		in __tmp_reg__,__SREG__
+ 403 000c F894      		cli
+ 404 000e DEBF      		out __SP_H__,r29
+ 405 0010 0FBE      		out __SREG__,__tmp_reg__
+ 406 0012 CDBF      		out __SP_L__,r28
+ 407               	/* prologue: function */
+ 408               	/* frame size = 8 */
+ 409               	/* stack size = 10 */
+ 410               	.L__stack_usage = 10
+ 411               	.LVL20:
+ 107:Arduino-usbmidi.c ****     SetupHardware();
+ 412               		.loc 4 107 0
+ 413 0014 0E94 0000 		call SetupHardware
+ 414               	.LVL21:
+ 415               	.LBB88:
+ 416               	.LBB89:
+  87:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+ 417               		.loc 1 87 0
+ 418 0018 2FB7      		in r18,__SREG__
+ 419               	.LVL22:
+ 420               	.LBB90:
+ 421               	.LBB91:
+  50:/usr/lib/avr/include/util/atomic.h ****     cli();
+ 422               		.loc 2 50 0
+ 423               	/* #APP */
+ 424               	 ;  50 "/usr/lib/avr/include/util/atomic.h" 1
+ 425 001a F894      		cli
+ 426               	 ;  0 "" 2
+ 427               	.LVL23:
+ 428               	/* #NOAPP */
+ 429               	.LBE91:
+ 430               	.LBE90:
+  89:Lib/LightweightRingBuff.h **** 				Buffer->In  = Buffer->Buffer;
+ 431               		.loc 1 89 0
+ 432 001c 80E0      		ldi r24,lo8(USBtoUSART_Buffer)
+ 433 001e 90E0      		ldi r25,hi8(USBtoUSART_Buffer)
+ 434 0020 9093 0000 		sts USBtoUSART_Buffer+128+1,r25
+ 435 0024 8093 0000 		sts USBtoUSART_Buffer+128,r24
+  90:Lib/LightweightRingBuff.h **** 				Buffer->Out = Buffer->Buffer;
+ 436               		.loc 1 90 0
+ 437 0028 9093 0000 		sts USBtoUSART_Buffer+130+1,r25
+ 438 002c 8093 0000 		sts USBtoUSART_Buffer+130,r24
+ 439               	.LVL24:
+ 440               	.LBB92:
+ 441               	.LBB93:
+  70:/usr/lib/avr/include/util/atomic.h ****     SREG = *__s;
+ 442               		.loc 2 70 0
+ 443 0030 2FBF      		out __SREG__,r18
+ 444               		.loc 2 71 0
+ 445               	.LVL25:
+ 446               	.LBE93:
+ 447               	.LBE92:
+ 448               	.LBE89:
+ 449               	.LBE88:
+ 450               	.LBB94:
+ 451               	.LBB95:
+  87:Lib/LightweightRingBuff.h **** 			ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+ 452               		.loc 1 87 0
+ 453 0032 2FB7      		in r18,__SREG__
+ 454               	.LVL26:
+ 455               	.LBB96:
+ 456               	.LBB97:
+  50:/usr/lib/avr/include/util/atomic.h ****     cli();
+ 457               		.loc 2 50 0
+ 458               	/* #APP */
+ 459               	 ;  50 "/usr/lib/avr/include/util/atomic.h" 1
+ 460 0034 F894      		cli
+ 461               	 ;  0 "" 2
+ 462               	.LVL27:
+ 463               	/* #NOAPP */
+ 464               	.LBE97:
+ 465               	.LBE96:
+  89:Lib/LightweightRingBuff.h **** 				Buffer->In  = Buffer->Buffer;
+ 466               		.loc 1 89 0
+ 467 0036 80E0      		ldi r24,lo8(USARTtoUSB_Buffer)
+ 468 0038 90E0      		ldi r25,hi8(USARTtoUSB_Buffer)
+ 469 003a 9093 0000 		sts USARTtoUSB_Buffer+128+1,r25
+ 470 003e 8093 0000 		sts USARTtoUSB_Buffer+128,r24
+  90:Lib/LightweightRingBuff.h **** 				Buffer->Out = Buffer->Buffer;
+ 471               		.loc 1 90 0
+ 472 0042 9093 0000 		sts USARTtoUSB_Buffer+130+1,r25
+ 473 0046 8093 0000 		sts USARTtoUSB_Buffer+130,r24
+ 474               	.LVL28:
+ 475               	.LBB98:
+ 476               	.LBB99:
+  70:/usr/lib/avr/include/util/atomic.h ****     SREG = *__s;
+ 477               		.loc 2 70 0
+ 478 004a 2FBF      		out __SREG__,r18
+ 479               	.LVL29:
+ 480               		.loc 2 71 0
+ 481               	.LBE99:
+ 482               	.LBE98:
+ 483               	.LBE95:
+ 484               	.LBE94:
+ 112:Arduino-usbmidi.c ****     LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+ 485               		.loc 4 112 0
+ 486 004c 80E2      		ldi r24,lo8(32)
+ 487 004e 0E94 0000 		call LEDs_SetAllLEDs
+ 488               	.LVL30:
+ 113:Arduino-usbmidi.c ****     sei();
+ 489               		.loc 4 113 0
+ 490               	/* #APP */
+ 491               	 ;  113 "Arduino-usbmidi.c" 1
+ 492 0052 7894      		sei
+ 493               	 ;  0 "" 2
+ 105:Arduino-usbmidi.c ****     int led2_ticks = 0;
+ 494               		.loc 4 105 0
+ 495               	/* #NOAPP */
+ 496 0054 E12C      		mov r14,__zero_reg__
+ 497 0056 F12C      		mov r15,__zero_reg__
+ 104:Arduino-usbmidi.c ****     int led1_ticks = 0;
+ 498               		.loc 4 104 0
+ 499 0058 00E0      		ldi r16,0
+ 500 005a 10E0      		ldi r17,0
+ 501 005c 9E01      		movw r18,r28
+ 502 005e 2B5F      		subi r18,-5
+ 503 0060 3F4F      		sbci r19,-1
+ 504 0062 6901      		movw r12,r18
+ 505               	.LBB100:
+ 506               	.LBB101:
+ 151:Arduino-usbmidi.c **** 	    if ((BUFFER_SIZE - count) >= sizeof(midiMsg)) {
+ 507               		.loc 4 151 0
+ 508 0064 40E8      		ldi r20,lo8(-128)
+ 509 0066 A42E      		mov r10,r20
+ 510 0068 B12C      		mov r11,__zero_reg__
+ 511               	.LVL31:
+ 512               	.L24:
+ 513               	.LBE101:
+ 116:Arduino-usbmidi.c **** 	RingBuff_Count_t BufferCount = RingBuffer_GetCount(&USARTtoUSB_Buffer);
+ 514               		.loc 4 116 0
+ 515 006a 80E0      		ldi r24,lo8(USARTtoUSB_Buffer+132)
+ 516 006c 90E0      		ldi r25,hi8(USARTtoUSB_Buffer+132)
+ 517 006e 0E94 0000 		call RingBuffer_GetCount.isra.1
+ 518               	.LVL32:
+ 119:Arduino-usbmidi.c **** 	if (BufferCount >= 4) {
+ 519               		.loc 4 119 0
+ 520 0072 8430      		cpi r24,lo8(4)
+ 521 0074 00F0      		brlo .L10
+ 522 0076 8E01      		movw r16,r28
+ 523               	.LVL33:
+ 524 0078 0F5F      		subi r16,-1
+ 525 007a 1F4F      		sbci r17,-1
+ 526               	.LVL34:
+ 527               	.L12:
+ 122:Arduino-usbmidi.c **** 		((uint8_t *)&midiMsg)[ind] = RingBuffer_Remove(&USARTtoUSB_Buffer);
+ 528               		.loc 4 122 0 discriminator 2
+ 529 007c 80E0      		ldi r24,lo8(USARTtoUSB_Buffer)
+ 530 007e 90E0      		ldi r25,hi8(USARTtoUSB_Buffer)
+ 531 0080 0E94 0000 		call RingBuffer_Remove
+ 532               	.LVL35:
+ 533 0084 F801      		movw r30,r16
+ 534 0086 8193      		st Z+,r24
+ 535 0088 8F01      		movw r16,r30
+ 536               	.LVL36:
+ 121:Arduino-usbmidi.c **** 	    for (ind=0; ind<4; ind++) {
+ 537               		.loc 4 121 0 discriminator 2
+ 538 008a EC15      		cp r30,r12
+ 539 008c FD05      		cpc r31,r13
+ 540 008e 01F4      		brne .L12
+ 127:Arduino-usbmidi.c **** 	    midiEvent.Command = midiMsg.command >> 4;
+ 541               		.loc 4 127 0
+ 542 0090 9981      		ldd r25,Y+1
+ 543 0092 892F      		mov r24,r25
+ 544 0094 8295      		swap r24
+ 545 0096 8F70      		andi r24,lo8(15)
+ 546 0098 8D83      		std Y+5,r24
+ 128:Arduino-usbmidi.c **** 	    midiEvent.Data1 = (midiMsg.command & 0xF0) | ((midiMsg.channel-1) & 0x0F);
+ 547               		.loc 4 128 0
+ 548 009a 8A81      		ldd r24,Y+2
+ 549 009c 8150      		subi r24,lo8(-(-1))
+ 550 009e 8F70      		andi r24,lo8(15)
+ 551 00a0 907F      		andi r25,lo8(-16)
+ 552 00a2 892B      		or r24,r25
+ 553 00a4 8E83      		std Y+6,r24
+ 129:Arduino-usbmidi.c **** 	    midiEvent.Data2 = midiMsg.data2;
+ 554               		.loc 4 129 0
+ 555 00a6 8B81      		ldd r24,Y+3
+ 556 00a8 8F83      		std Y+7,r24
+ 130:Arduino-usbmidi.c **** 	    midiEvent.Data3 = midiMsg.data3;
+ 557               		.loc 4 130 0
+ 558 00aa 8C81      		ldd r24,Y+4
+ 559 00ac 8887      		std Y+8,r24
+ 132:Arduino-usbmidi.c **** 	    MIDI_Device_SendEventPacket(&Keyboard_MIDI_Interface, &midiEvent);
+ 560               		.loc 4 132 0
+ 561 00ae B601      		movw r22,r12
+ 562 00b0 80E0      		ldi r24,lo8(Keyboard_MIDI_Interface)
+ 563 00b2 90E0      		ldi r25,hi8(Keyboard_MIDI_Interface)
+ 564 00b4 0E94 0000 		call MIDI_Device_SendEventPacket
+ 565               	.LVL37:
+ 133:Arduino-usbmidi.c **** 	    MIDI_Device_Flush(&Keyboard_MIDI_Interface);
+ 566               		.loc 4 133 0
+ 567 00b8 80E0      		ldi r24,lo8(Keyboard_MIDI_Interface)
+ 568 00ba 90E0      		ldi r25,hi8(Keyboard_MIDI_Interface)
+ 569 00bc 0E94 0000 		call MIDI_Device_Flush
+ 570               	.LVL38:
+ 571               	.LBB106:
+ 572               	.LBB107:
+  75:./Board/LEDs.h **** 				PORTD &= ~LEDMask;
+ 573               		.loc 3 75 0
+ 574 00c0 5D98      		cbi 0xb,5
+ 575               	.LVL39:
+ 576               	.LBE107:
+ 577               	.LBE106:
+ 137:Arduino-usbmidi.c **** 	    led1_ticks = LED_ON_TICKS;
+ 578               		.loc 4 137 0
+ 579 00c2 00E1      		ldi r16,lo8(16)
+ 580 00c4 17E2      		ldi r17,lo8(39)
+ 581 00c6 00C0      		rjmp .L13
+ 582               	.LVL40:
+ 583               	.L10:
+ 141:Arduino-usbmidi.c **** 	if (led1_ticks) {
+ 584               		.loc 4 141 0
+ 585 00c8 0115      		cp r16,__zero_reg__
+ 586 00ca 1105      		cpc r17,__zero_reg__
+ 587 00cc 01F0      		breq .L14
+ 588               	.LVL41:
+ 589               	.L13:
+ 142:Arduino-usbmidi.c **** 	    led1_ticks--;
+ 590               		.loc 4 142 0
+ 591 00ce 0150      		subi r16,1
+ 592 00d0 1109      		sbc r17,__zero_reg__
+ 593               	.LVL42:
+ 143:Arduino-usbmidi.c **** 	    if (led1_ticks == 0) {
+ 594               		.loc 4 143 0
+ 595 00d2 0115      		cp r16,__zero_reg__
+ 596 00d4 1105      		cpc r17,__zero_reg__
+ 597 00d6 01F4      		brne .L14
+ 598               	.LVL43:
+ 599               	.LBB108:
+ 600               	.LBB109:
+  80:./Board/LEDs.h **** 				PORTD |= LEDMask;
+ 601               		.loc 3 80 0
+ 602 00d8 5D9A      		sbi 0xb,5
+ 603               	.LVL44:
+ 604               	.L14:
+ 605               	.LBE109:
+ 606               	.LBE108:
+ 148:Arduino-usbmidi.c **** 	if (MIDI_Device_ReceiveEventPacket(&Keyboard_MIDI_Interface, &midiEvent)) {
+ 607               		.loc 4 148 0
+ 608 00da B601      		movw r22,r12
+ 609 00dc 80E0      		ldi r24,lo8(Keyboard_MIDI_Interface)
+ 610 00de 90E0      		ldi r25,hi8(Keyboard_MIDI_Interface)
+ 611 00e0 0E94 0000 		call MIDI_Device_ReceiveEventPacket
+ 612               	.LVL45:
+ 613 00e4 8823      		tst r24
+ 614 00e6 01F0      		breq .L15
+ 615               	.LBB110:
+ 149:Arduino-usbmidi.c **** 	    RingBuff_Count_t count = RingBuffer_GetCount(&USBtoUSART_Buffer);
+ 616               		.loc 4 149 0
+ 617 00e8 80E0      		ldi r24,lo8(USBtoUSART_Buffer+132)
+ 618 00ea 90E0      		ldi r25,hi8(USBtoUSART_Buffer+132)
+ 619 00ec 0E94 0000 		call RingBuffer_GetCount.isra.1
+ 620               	.LVL46:
+ 151:Arduino-usbmidi.c **** 	    if ((BUFFER_SIZE - count) >= sizeof(midiMsg)) {
+ 621               		.loc 4 151 0
+ 622 00f0 9501      		movw r18,r10
+ 623 00f2 281B      		sub r18,r24
+ 624 00f4 3109      		sbc r19,__zero_reg__
+ 625 00f6 2430      		cpi r18,4
+ 626 00f8 3105      		cpc r19,__zero_reg__
+ 627 00fa 00F0      		brlo .L16
+ 152:Arduino-usbmidi.c **** 		midiMsg.command = midiEvent.Command << 4;
+ 628               		.loc 4 152 0
+ 629 00fc 8D81      		ldd r24,Y+5
+ 630               	.LVL47:
+ 631 00fe 8295      		swap r24
+ 632 0100 807F      		andi r24,lo8(-16)
+ 633 0102 8983      		std Y+1,r24
+ 153:Arduino-usbmidi.c **** 		midiMsg.channel = (midiEvent.Data1 & 0x0F) + 1;
+ 634               		.loc 4 153 0
+ 635 0104 8E81      		ldd r24,Y+6
+ 636 0106 8F70      		andi r24,lo8(15)
+ 637 0108 8F5F      		subi r24,lo8(-(1))
+ 638 010a 8A83      		std Y+2,r24
+ 154:Arduino-usbmidi.c **** 		midiMsg.data2 = midiEvent.Data2;
+ 639               		.loc 4 154 0
+ 640 010c 8F81      		ldd r24,Y+7
+ 641 010e 8B83      		std Y+3,r24
+ 155:Arduino-usbmidi.c **** 		midiMsg.data3 = midiEvent.Data3;
+ 642               		.loc 4 155 0
+ 643 0110 8885      		ldd r24,Y+8
+ 644 0112 8C83      		std Y+4,r24
+ 645               	.LVL48:
+ 646 0114 CE01      		movw r24,r28
+ 647 0116 0196      		adiw r24,1
+ 648 0118 7C01      		movw r14,r24
+ 649               	.LVL49:
+ 650               	.L17:
+ 157:Arduino-usbmidi.c **** 		for (ind=0; ind<sizeof(midiMsg); ind++) {
+ 651               		.loc 4 157 0 discriminator 1
+ 652 011a EC14      		cp r14,r12
+ 653 011c FD04      		cpc r15,r13
+ 654 011e 01F0      		breq .L37
+ 158:Arduino-usbmidi.c **** 		    RingBuffer_Insert(&USBtoUSART_Buffer, ((uint8_t *)&midiMsg)[ind]);
+ 655               		.loc 4 158 0 discriminator 2
+ 656 0120 F701      		movw r30,r14
+ 657 0122 6191      		ld r22,Z+
+ 658 0124 7F01      		movw r14,r30
+ 659 0126 80E0      		ldi r24,lo8(USBtoUSART_Buffer)
+ 660 0128 90E0      		ldi r25,hi8(USBtoUSART_Buffer)
+ 661 012a 0E94 0000 		call RingBuffer_Insert
+ 662               	.LVL50:
+ 663 012e 00C0      		rjmp .L17
+ 664               	.L37:
+ 665               	.LVL51:
+ 666               	.LBB102:
+ 667               	.LBB103:
+  75:./Board/LEDs.h **** 				PORTD &= ~LEDMask;
+ 668               		.loc 3 75 0
+ 669 0130 5C98      		cbi 0xb,4
+ 670               	.LVL52:
+ 671               	.LBE103:
+ 672               	.LBE102:
+ 163:Arduino-usbmidi.c **** 		led2_ticks = LED_ON_TICKS;
+ 673               		.loc 4 163 0
+ 674 0132 30E1      		ldi r19,lo8(16)
+ 675 0134 E32E      		mov r14,r19
+ 676 0136 37E2      		ldi r19,lo8(39)
+ 677 0138 F32E      		mov r15,r19
+ 678 013a 00C0      		rjmp .L19
+ 679               	.LVL53:
+ 680               	.L16:
+ 681               	.LBB104:
+ 682               	.LBB105:
+  75:./Board/LEDs.h **** 				PORTD &= ~LEDMask;
+ 683               		.loc 3 75 0
+ 684 013c 5C98      		cbi 0xb,4
+ 685               	.LVL54:
+ 686               	.L15:
+ 687               	.LBE105:
+ 688               	.LBE104:
+ 689               	.LBE110:
+ 176:Arduino-usbmidi.c **** 	if (led2_ticks) {
+ 690               		.loc 4 176 0
+ 691 013e E114      		cp r14,__zero_reg__
+ 692 0140 F104      		cpc r15,__zero_reg__
+ 693 0142 01F0      		breq .L20
+ 694               	.LVL55:
+ 695               	.L19:
+ 177:Arduino-usbmidi.c **** 	    led2_ticks--;
+ 696               		.loc 4 177 0
+ 697 0144 F1E0      		ldi r31,1
+ 698 0146 EF1A      		sub r14,r31
+ 699 0148 F108      		sbc r15,__zero_reg__
+ 700               	.LVL56:
+ 178:Arduino-usbmidi.c **** 	    if (led2_ticks == 0) {
+ 701               		.loc 4 178 0
+ 702 014a E114      		cp r14,__zero_reg__
+ 703 014c F104      		cpc r15,__zero_reg__
+ 704 014e 01F4      		brne .L20
+ 705               	.LVL57:
+ 706               	.LBB111:
+ 707               	.LBB112:
+  80:./Board/LEDs.h **** 				PORTD |= LEDMask;
+ 708               		.loc 3 80 0
+ 709 0150 5C9A      		sbi 0xb,4
+ 710               	.LVL58:
+ 711               	.L20:
+ 712               	.LBE112:
+ 713               	.LBE111:
+ 714               	.LBB113:
+ 715               	.LBB114:
+ 146:Lib/LightweightRingBuff.h **** 			return (RingBuffer_GetCount(Buffer) == 0);
+ 716               		.loc 1 146 0
+ 717 0152 80E0      		ldi r24,lo8(USBtoUSART_Buffer+132)
+ 718 0154 90E0      		ldi r25,hi8(USBtoUSART_Buffer+132)
+ 719 0156 0E94 0000 		call RingBuffer_GetCount.isra.1
+ 720               	.LVL59:
+ 721               	.LBE114:
+ 722               	.LBE113:
+ 184:Arduino-usbmidi.c **** 	if (!(RingBuffer_IsEmpty(&USBtoUSART_Buffer))) {
+ 723               		.loc 4 184 0
+ 724 015a 8823      		tst r24
+ 725 015c 01F0      		breq .L21
+ 185:Arduino-usbmidi.c **** 	    Serial_TxByte(RingBuffer_Remove(&USBtoUSART_Buffer));
+ 726               		.loc 4 185 0
+ 727 015e 80E0      		ldi r24,lo8(USBtoUSART_Buffer)
+ 728 0160 90E0      		ldi r25,hi8(USBtoUSART_Buffer)
+ 729 0162 0E94 0000 		call RingBuffer_Remove
+ 730               	.LVL60:
+ 731               	.L23:
+ 732               	.LBB115:
+ 733               	.LBB116:
+ 110:../../LUFA/Drivers/Peripheral/Serial.h **** 			}
+ 111:../../LUFA/Drivers/Peripheral/Serial.h **** 
+ 112:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Turns off the USART driver, disabling and returning used hardware to their default configura
+ 113:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline void Serial_ShutDown(void)
+ 114:../../LUFA/Drivers/Peripheral/Serial.h **** 			{
+ 115:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1B = 0;
+ 116:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1A = 0;
+ 117:../../LUFA/Drivers/Peripheral/Serial.h **** 				UCSR1C = 0;
+ 118:../../LUFA/Drivers/Peripheral/Serial.h **** 
+ 119:../../LUFA/Drivers/Peripheral/Serial.h **** 				UBRR1  = 0;
+ 120:../../LUFA/Drivers/Peripheral/Serial.h **** 				
+ 121:../../LUFA/Drivers/Peripheral/Serial.h **** 				DDRD  &= ~(1 << 3);
+ 122:../../LUFA/Drivers/Peripheral/Serial.h **** 				PORTD &= ~(1 << 2);
+ 123:../../LUFA/Drivers/Peripheral/Serial.h **** 			}
+ 124:../../LUFA/Drivers/Peripheral/Serial.h **** 
+ 125:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Indicates whether a character has been received through the USART.
+ 126:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *
+ 127:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \return Boolean true if a character has been received, false otherwise.
+ 128:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+ 129:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline bool Serial_IsCharReceived(void) ATTR_WARN_UNUSED_RESULT ATTR_ALWAYS_INLINE;
+ 130:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline bool Serial_IsCharReceived(void)
+ 131:../../LUFA/Drivers/Peripheral/Serial.h **** 			{
+ 132:../../LUFA/Drivers/Peripheral/Serial.h **** 				return ((UCSR1A & (1 << RXC1)) ? true : false);
+ 133:../../LUFA/Drivers/Peripheral/Serial.h **** 			}
+ 134:../../LUFA/Drivers/Peripheral/Serial.h **** 			
+ 135:../../LUFA/Drivers/Peripheral/Serial.h **** 			/** Transmits a given byte through the USART.
+ 136:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *
+ 137:../../LUFA/Drivers/Peripheral/Serial.h **** 			 *  \param[in] DataByte  Byte to transmit through the USART.
+ 138:../../LUFA/Drivers/Peripheral/Serial.h **** 			 */
+ 139:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline void Serial_TxByte(const char DataByte) ATTR_ALWAYS_INLINE;
+ 140:../../LUFA/Drivers/Peripheral/Serial.h **** 			static inline void Serial_TxByte(const char DataByte)
+ 141:../../LUFA/Drivers/Peripheral/Serial.h **** 			{
+ 142:../../LUFA/Drivers/Peripheral/Serial.h **** 				while (!(UCSR1A & (1 << UDRE1)));
+ 734               		.loc 5 142 0
+ 735 0166 9091 C800 		lds r25,200
+ 736 016a 95FF      		sbrs r25,5
+ 737 016c 00C0      		rjmp .L23
+ 143:../../LUFA/Drivers/Peripheral/Serial.h **** 				UDR1 = DataByte;
+ 738               		.loc 5 143 0
+ 739 016e 8093 CE00 		sts 206,r24
+ 740               	.LVL61:
+ 741               	.L21:
+ 742               	.LBE116:
+ 743               	.LBE115:
+ 189:Arduino-usbmidi.c **** 	USB_USBTask();
+ 744               		.loc 4 189 0
+ 745 0172 0E94 0000 		call USB_USBTask
+ 746               	.LVL62:
+ 747               	.LBE100:
+ 190:Arduino-usbmidi.c ****     }
+ 748               		.loc 4 190 0
+ 749 0176 00C0      		rjmp .L24
+ 750               		.cfi_endproc
+ 751               	.LFE87:
+ 753               		.section	.text.EVENT_USB_Device_Connect,"ax",@progbits
+ 754               	.global	EVENT_USB_Device_Connect
+ 756               	EVENT_USB_Device_Connect:
+ 757               	.LFB89:
+ 219:Arduino-usbmidi.c **** 
+ 220:Arduino-usbmidi.c **** /** Event handler for the library USB Connection event. */
+ 221:Arduino-usbmidi.c **** void EVENT_USB_Device_Connect(void)
+ 222:Arduino-usbmidi.c **** {
+ 758               		.loc 4 222 0
+ 759               		.cfi_startproc
+ 760               	/* prologue: function */
+ 761               	/* frame size = 0 */
+ 762               	/* stack size = 0 */
+ 763               	.L__stack_usage = 0
+ 223:Arduino-usbmidi.c ****     LEDs_SetAllLEDs(LEDMASK_USB_ENUMERATING);
+ 764               		.loc 4 223 0
+ 765 0000 80E1      		ldi r24,lo8(16)
+ 766 0002 0C94 0000 		jmp LEDs_SetAllLEDs
+ 767               	.LVL63:
+ 768               		.cfi_endproc
+ 769               	.LFE89:
+ 771               		.section	.text.EVENT_USB_Device_Disconnect,"ax",@progbits
+ 772               	.global	EVENT_USB_Device_Disconnect
+ 774               	EVENT_USB_Device_Disconnect:
+ 775               	.LFB90:
+ 224:Arduino-usbmidi.c **** }
+ 225:Arduino-usbmidi.c **** 
+ 226:Arduino-usbmidi.c **** /** Event handler for the library USB Disconnection event. */
+ 227:Arduino-usbmidi.c **** void EVENT_USB_Device_Disconnect(void)
+ 228:Arduino-usbmidi.c **** {
+ 776               		.loc 4 228 0
+ 777               		.cfi_startproc
+ 778               	/* prologue: function */
+ 779               	/* frame size = 0 */
+ 780               	/* stack size = 0 */
+ 781               	.L__stack_usage = 0
+ 229:Arduino-usbmidi.c ****     LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+ 782               		.loc 4 229 0
+ 783 0000 80E2      		ldi r24,lo8(32)
+ 784 0002 0C94 0000 		jmp LEDs_SetAllLEDs
+ 785               	.LVL64:
+ 786               		.cfi_endproc
+ 787               	.LFE90:
+ 789               		.section	.text.EVENT_USB_Device_ConfigurationChanged,"ax",@progbits
+ 790               	.global	EVENT_USB_Device_ConfigurationChanged
+ 792               	EVENT_USB_Device_ConfigurationChanged:
+ 793               	.LFB91:
+ 230:Arduino-usbmidi.c **** }
+ 231:Arduino-usbmidi.c **** 
+ 232:Arduino-usbmidi.c **** /** Event handler for the library USB Configuration Changed event. */
+ 233:Arduino-usbmidi.c **** void EVENT_USB_Device_ConfigurationChanged(void)
+ 234:Arduino-usbmidi.c **** {
+ 794               		.loc 4 234 0
+ 795               		.cfi_startproc
+ 796               	/* prologue: function */
+ 797               	/* frame size = 0 */
+ 798               	/* stack size = 0 */
+ 799               	.L__stack_usage = 0
+ 235:Arduino-usbmidi.c ****     LEDs_SetAllLEDs(LEDMASK_USB_READY);
+ 800               		.loc 4 235 0
+ 801 0000 80E0      		ldi r24,0
+ 802 0002 0E94 0000 		call LEDs_SetAllLEDs
+ 803               	.LVL65:
+ 236:Arduino-usbmidi.c ****     if (!MIDI_Device_ConfigureEndpoints(&Keyboard_MIDI_Interface))
+ 804               		.loc 4 236 0
+ 805 0006 80E0      		ldi r24,lo8(Keyboard_MIDI_Interface)
+ 806 0008 90E0      		ldi r25,hi8(Keyboard_MIDI_Interface)
+ 807 000a 0E94 0000 		call MIDI_Device_ConfigureEndpoints
+ 808               	.LVL66:
+ 809 000e 8111      		cpse r24,__zero_reg__
+ 810 0010 00C0      		rjmp .L40
+ 237:Arduino-usbmidi.c **** 	LEDs_SetAllLEDs(LEDMASK_USB_ERROR);
+ 811               		.loc 4 237 0
+ 812 0012 80E3      		ldi r24,lo8(48)
+ 813 0014 0C94 0000 		jmp LEDs_SetAllLEDs
+ 814               	.LVL67:
+ 815               	.L40:
+ 816 0018 0895      		ret
+ 817               		.cfi_endproc
+ 818               	.LFE91:
+ 820               		.section	.text.EVENT_USB_Device_UnhandledControlRequest,"ax",@progbits
+ 821               	.global	EVENT_USB_Device_UnhandledControlRequest
+ 823               	EVENT_USB_Device_UnhandledControlRequest:
+ 824               	.LFB92:
+ 238:Arduino-usbmidi.c **** }
+ 239:Arduino-usbmidi.c **** 
+ 240:Arduino-usbmidi.c **** /** Event handler for the library USB Unhandled Control Request event. */
+ 241:Arduino-usbmidi.c **** void EVENT_USB_Device_UnhandledControlRequest(void)
+ 242:Arduino-usbmidi.c **** {
+ 825               		.loc 4 242 0
+ 826               		.cfi_startproc
+ 827               	/* prologue: function */
+ 828               	/* frame size = 0 */
+ 829               	/* stack size = 0 */
+ 830               	.L__stack_usage = 0
+ 831               	.LVL68:
+ 832 0000 0895      		ret
+ 833               		.cfi_endproc
+ 834               	.LFE92:
+ 836               		.section	.text.__vector_23,"ax",@progbits
+ 837               	.global	__vector_23
+ 839               	__vector_23:
+ 840               	.LFB93:
+ 243:Arduino-usbmidi.c **** 	MIDI_Device_ProcessControlRequest(&Keyboard_MIDI_Interface);
+ 244:Arduino-usbmidi.c **** }
+ 245:Arduino-usbmidi.c **** 
+ 246:Arduino-usbmidi.c **** /** ISR to manage the reception of data from the serial port, placing received bytes into a circula
+ 247:Arduino-usbmidi.c ****  *  for later transmission to the host.
+ 248:Arduino-usbmidi.c ****  */
+ 249:Arduino-usbmidi.c **** ISR(USART1_RX_vect, ISR_BLOCK)
+ 250:Arduino-usbmidi.c **** {
+ 841               		.loc 4 250 0
+ 842               		.cfi_startproc
+ 843               		.loc 4 250 0
+ 844 0000 1F92      		push r1
+ 845               	.LCFI13:
+ 846               		.cfi_def_cfa_offset 3
+ 847               		.cfi_offset 1, -2
+ 848 0002 0F92      		push r0
+ 849               	.LCFI14:
+ 850               		.cfi_def_cfa_offset 4
+ 851               		.cfi_offset 0, -3
+ 852 0004 0FB6      		in r0,__SREG__
+ 853 0006 0F92      		push r0
+ 854 0008 1124      		clr __zero_reg__
+ 855 000a 2F93      		push r18
+ 856               	.LCFI15:
+ 857               		.cfi_def_cfa_offset 5
+ 858               		.cfi_offset 18, -4
+ 859 000c 3F93      		push r19
+ 860               	.LCFI16:
+ 861               		.cfi_def_cfa_offset 6
+ 862               		.cfi_offset 19, -5
+ 863 000e 4F93      		push r20
+ 864               	.LCFI17:
+ 865               		.cfi_def_cfa_offset 7
+ 866               		.cfi_offset 20, -6
+ 867 0010 5F93      		push r21
+ 868               	.LCFI18:
+ 869               		.cfi_def_cfa_offset 8
+ 870               		.cfi_offset 21, -7
+ 871 0012 6F93      		push r22
+ 872               	.LCFI19:
+ 873               		.cfi_def_cfa_offset 9
+ 874               		.cfi_offset 22, -8
+ 875 0014 7F93      		push r23
+ 876               	.LCFI20:
+ 877               		.cfi_def_cfa_offset 10
+ 878               		.cfi_offset 23, -9
+ 879 0016 8F93      		push r24
+ 880               	.LCFI21:
+ 881               		.cfi_def_cfa_offset 11
+ 882               		.cfi_offset 24, -10
+ 883 0018 9F93      		push r25
+ 884               	.LCFI22:
+ 885               		.cfi_def_cfa_offset 12
+ 886               		.cfi_offset 25, -11
+ 887 001a AF93      		push r26
+ 888               	.LCFI23:
+ 889               		.cfi_def_cfa_offset 13
+ 890               		.cfi_offset 26, -12
+ 891 001c BF93      		push r27
+ 892               	.LCFI24:
+ 893               		.cfi_def_cfa_offset 14
+ 894               		.cfi_offset 27, -13
+ 895 001e EF93      		push r30
+ 896               	.LCFI25:
+ 897               		.cfi_def_cfa_offset 15
+ 898               		.cfi_offset 30, -14
+ 899 0020 FF93      		push r31
+ 900               	.LCFI26:
+ 901               		.cfi_def_cfa_offset 16
+ 902               		.cfi_offset 31, -15
+ 903 0022 CF93      		push r28
+ 904               	.LCFI27:
+ 905               		.cfi_def_cfa_offset 17
+ 906               		.cfi_offset 28, -16
+ 907 0024 DF93      		push r29
+ 908               	.LCFI28:
+ 909               		.cfi_def_cfa_offset 18
+ 910               		.cfi_offset 29, -17
+ 911 0026 1F92      		push __zero_reg__
+ 912               	.LCFI29:
+ 913               		.cfi_def_cfa_offset 19
+ 914 0028 CDB7      		in r28,__SP_L__
+ 915 002a DEB7      		in r29,__SP_H__
+ 916               	.LCFI30:
+ 917               		.cfi_def_cfa_register 28
+ 918               	/* prologue: Signal */
+ 919               	/* frame size = 1 */
+ 920               	/* stack size = 18 */
+ 921               	.L__stack_usage = 18
+ 251:Arduino-usbmidi.c ****     uint8_t ReceivedByte = UDR1;
+ 922               		.loc 4 251 0
+ 923 002c 6091 CE00 		lds r22,206
+ 924               	.LVL69:
+ 925               	.LBB119:
+ 926               	.LBB120:
+ 129:Lib/LightweightRingBuff.h **** 			return (RingBuffer_GetCount(Buffer) == BUFFER_SIZE);
+ 927               		.loc 1 129 0
+ 928 0030 80E0      		ldi r24,lo8(USARTtoUSB_Buffer+132)
+ 929 0032 90E0      		ldi r25,hi8(USARTtoUSB_Buffer+132)
+ 930 0034 6983      		std Y+1,r22
+ 931 0036 0E94 0000 		call RingBuffer_GetCount.isra.1
+ 932               	.LVL70:
+ 933               	.LBE120:
+ 934               	.LBE119:
+ 252:Arduino-usbmidi.c **** 
+ 253:Arduino-usbmidi.c ****     if ((true) &&
+ 935               		.loc 4 253 0
+ 936 003a 6981      		ldd r22,Y+1
+ 937 003c 8038      		cpi r24,lo8(-128)
+ 938 003e 01F0      		breq .L43
+ 254:Arduino-usbmidi.c **** 	    !RingBuffer_IsFull(&USARTtoUSB_Buffer)) {
+ 255:Arduino-usbmidi.c **** 	RingBuffer_Insert(&USARTtoUSB_Buffer, ReceivedByte);
+ 939               		.loc 4 255 0
+ 940 0040 80E0      		ldi r24,lo8(USARTtoUSB_Buffer)
+ 941 0042 90E0      		ldi r25,hi8(USARTtoUSB_Buffer)
+ 942 0044 0E94 0000 		call RingBuffer_Insert
+ 943               	.LVL71:
+ 944               	.L43:
+ 945               	/* epilogue start */
+ 256:Arduino-usbmidi.c ****     }
+ 257:Arduino-usbmidi.c **** }
+ 946               		.loc 4 257 0
+ 947 0048 0F90      		pop __tmp_reg__
+ 948 004a DF91      		pop r29
+ 949 004c CF91      		pop r28
+ 950 004e FF91      		pop r31
+ 951 0050 EF91      		pop r30
+ 952 0052 BF91      		pop r27
+ 953 0054 AF91      		pop r26
+ 954 0056 9F91      		pop r25
+ 955 0058 8F91      		pop r24
+ 956 005a 7F91      		pop r23
+ 957 005c 6F91      		pop r22
+ 958 005e 5F91      		pop r21
+ 959 0060 4F91      		pop r20
+ 960 0062 3F91      		pop r19
+ 961 0064 2F91      		pop r18
+ 962 0066 0F90      		pop r0
+ 963 0068 0FBE      		out __SREG__,r0
+ 964 006a 0F90      		pop r0
+ 965 006c 1F90      		pop r1
+ 966 006e 1895      		reti
+ 967               		.cfi_endproc
+ 968               	.LFE93:
+ 970               		.comm	USARTtoUSB_Buffer,133,1
+ 971               		.comm	USBtoUSART_Buffer,133,1
+ 972               	.global	Keyboard_MIDI_Interface
+ 973               		.data
+ 976               	Keyboard_MIDI_Interface:
+ 977 0000 01        		.byte	1
+ 978 0001 02        		.byte	2
+ 979 0002 4000      		.word	64
+ 980 0004 00        		.byte	0
+ 981 0005 01        		.byte	1
+ 982 0006 4000      		.word	64
+ 983 0008 00        		.byte	0
+ 984               		.text
+ 985               	.Letext0:
+ 986               		.file 6 "/usr/lib/avr/include/stdint.h"
+ 987               		.file 7 "../../LUFA/Drivers/USB/Class/Device/../Common/MIDI.h"
+ 988               		.file 8 "../../LUFA/Drivers/USB/Class/Device/MIDI.h"
+ 989               		.file 9 "../../LUFA/Drivers/USB/HighLevel/../LowLevel/USBController.h"
+ 990               		.file 10 "../../LUFA/Drivers/USB/HighLevel/USBTask.h"
+DEFINED SYMBOLS
+                            *ABS*:00000000 Arduino-usbmidi.c
+     /tmp/ccyWo08h.s:2      *ABS*:0000003e __SP_H__
+     /tmp/ccyWo08h.s:3      *ABS*:0000003d __SP_L__
+     /tmp/ccyWo08h.s:4      *ABS*:0000003f __SREG__
+     /tmp/ccyWo08h.s:5      *ABS*:00000000 __tmp_reg__
+     /tmp/ccyWo08h.s:6      *ABS*:00000001 __zero_reg__
+     /tmp/ccyWo08h.s:12     .text.RingBuffer_Insert:00000000 RingBuffer_Insert
+     /tmp/ccyWo08h.s:85     .text.RingBuffer_Remove:00000000 RingBuffer_Remove
+     /tmp/ccyWo08h.s:157    .text.LEDs_SetAllLEDs:00000000 LEDs_SetAllLEDs
+     /tmp/ccyWo08h.s:181    .text.RingBuffer_GetCount.isra.1:00000000 RingBuffer_GetCount.isra.1
+     /tmp/ccyWo08h.s:225    .text.SetupHardware:00000000 SetupHardware
+     /tmp/ccyWo08h.s:383    .text.startup.main:00000000 main
+                            *COM*:00000085 USBtoUSART_Buffer
+                            *COM*:00000085 USARTtoUSB_Buffer
+     /tmp/ccyWo08h.s:976    .data:00000000 Keyboard_MIDI_Interface
+     /tmp/ccyWo08h.s:756    .text.EVENT_USB_Device_Connect:00000000 EVENT_USB_Device_Connect
+     /tmp/ccyWo08h.s:774    .text.EVENT_USB_Device_Disconnect:00000000 EVENT_USB_Device_Disconnect
+     /tmp/ccyWo08h.s:792    .text.EVENT_USB_Device_ConfigurationChanged:00000000 EVENT_USB_Device_ConfigurationChanged
+     /tmp/ccyWo08h.s:823    .text.EVENT_USB_Device_UnhandledControlRequest:00000000 EVENT_USB_Device_UnhandledControlRequest
+     /tmp/ccyWo08h.s:839    .text.__vector_23:00000000 __vector_23
+
+UNDEFINED SYMBOLS
+USB_Init
+MIDI_Device_SendEventPacket
+MIDI_Device_Flush
+MIDI_Device_ReceiveEventPacket
+USB_USBTask
+MIDI_Device_ConfigureEndpoints
+__do_copy_data
+__do_clear_bss
